@@ -1,0 +1,461 @@
+seed,fraud_labels,model,metric,value
+42,50,Quantum ideal,PR-AUC,0.9233530191427585
+42,50,Quantum ideal,recall,0.84
+42,50,Quantum ideal,precision,0.8
+42,50,Quantum ideal,F1,0.8195121951219512
+42,50,Quantum ideal,ROC-AUC,0.9653499999999999
+42,50,Quantum ideal,accuracy,0.926
+42,50,RBF-SVM,PR-AUC,0.9161059469123198
+42,50,RBF-SVM,recall,0.87
+42,50,RBF-SVM,precision,0.7981651376146789
+42,50,RBF-SVM,F1,0.8325358851674641
+42,50,RBF-SVM,ROC-AUC,0.9546999999999999
+42,50,RBF-SVM,accuracy,0.93
+42,50,RBF-SVM,fit time,0.0037508000095840544
+42,50,RBF-SVM,prediction time,0.0027556000277400017
+42,50,Logistic regression,PR-AUC,0.9465344845810606
+42,50,Logistic regression,recall,0.84
+42,50,Logistic regression,precision,0.9545454545454546
+42,50,Logistic regression,F1,0.8936170212765957
+42,50,Logistic regression,ROC-AUC,0.9563999999999999
+42,50,Logistic regression,accuracy,0.96
+42,50,Logistic regression,fit time,0.003178299986757338
+42,50,Logistic regression,prediction time,0.00029779999749735
+42,50,Random forest,PR-AUC,0.9391724974838367
+42,50,Random forest,recall,0.81
+42,50,Random forest,precision,0.9642857142857143
+42,50,Random forest,F1,0.8804347826086957
+42,50,Random forest,ROC-AUC,0.9712000000000001
+42,50,Random forest,accuracy,0.956
+42,50,Random forest,fit time,0.14495079999323934
+42,50,Random forest,prediction time,0.014252799999667332
+42,50,Classical (all features),PR-AUC,0.9348175344279417
+42,50,Classical (all features),recall,0.84
+42,50,Classical (all features),precision,0.8571428571428571
+42,50,Classical (all features),F1,0.8484848484848485
+42,50,Classical (all features),ROC-AUC,0.968425
+42,50,Classical (all features),accuracy,0.94
+42,50,Classical (all features),fit time,0.0017902000108733773
+42,50,Classical (all features),prediction time,0.004481199983274564
+42,50,Best classical (CV-selected),PR-AUC,0.9348175344279417
+42,50,Quantum ideal,kernel time,0.7340299999923445
+42,50,Quantum ideal,fit time,0.0010559000074863434
+42,50,Quantum ideal,prediction time,0.0004785000055562705
+42,50,Quantum ideal,qubits,6.0
+42,50,Quantum ideal,depth,29.0
+42,50,Quantum ideal,gates,57.0
+42,50,Quantum ideal,two-qubit gates,30.0
+123,50,Quantum ideal,PR-AUC,0.9269560864215116
+123,50,Quantum ideal,recall,0.8
+123,50,Quantum ideal,precision,0.9411764705882353
+123,50,Quantum ideal,F1,0.8648648648648649
+123,50,Quantum ideal,ROC-AUC,0.9472749999999999
+123,50,Quantum ideal,accuracy,0.95
+123,50,RBF-SVM,PR-AUC,0.9287557247695308
+123,50,RBF-SVM,recall,0.85
+123,50,RBF-SVM,precision,0.8673469387755102
+123,50,RBF-SVM,F1,0.8585858585858586
+123,50,RBF-SVM,ROC-AUC,0.95345
+123,50,RBF-SVM,accuracy,0.944
+123,50,RBF-SVM,fit time,0.0014335000014398247
+123,50,RBF-SVM,prediction time,0.0030525000183843076
+123,50,Logistic regression,PR-AUC,0.9262108271395356
+123,50,Logistic regression,recall,0.86
+123,50,Logistic regression,precision,1.0
+123,50,Logistic regression,F1,0.9247311827956989
+123,50,Logistic regression,ROC-AUC,0.9497000000000001
+123,50,Logistic regression,accuracy,0.972
+123,50,Logistic regression,fit time,0.003117200016276911
+123,50,Logistic regression,prediction time,0.0002567000046838075
+123,50,Random forest,PR-AUC,0.9173156925010632
+123,50,Random forest,recall,0.83
+123,50,Random forest,precision,1.0
+123,50,Random forest,F1,0.907103825136612
+123,50,Random forest,ROC-AUC,0.9331625
+123,50,Random forest,accuracy,0.966
+123,50,Random forest,fit time,0.14542179999989457
+123,50,Random forest,prediction time,0.008045299997320399
+123,50,Classical (all features),PR-AUC,0.9323914774541998
+123,50,Classical (all features),recall,0.88
+123,50,Classical (all features),precision,0.9166666666666666
+123,50,Classical (all features),F1,0.8979591836734694
+123,50,Classical (all features),ROC-AUC,0.953875
+123,50,Classical (all features),accuracy,0.96
+123,50,Classical (all features),fit time,0.0018406000162940472
+123,50,Classical (all features),prediction time,0.005788899987237528
+123,50,Best classical (CV-selected),PR-AUC,0.9262108271395356
+123,50,Quantum ideal,kernel time,0.6273707999789622
+123,50,Quantum ideal,fit time,0.0008746999956201762
+123,50,Quantum ideal,prediction time,0.000460899987956509
+123,50,Quantum ideal,qubits,6.0
+123,50,Quantum ideal,depth,29.0
+123,50,Quantum ideal,gates,57.0
+123,50,Quantum ideal,two-qubit gates,30.0
+456,50,Quantum ideal,PR-AUC,0.7151271115211717
+456,50,Quantum ideal,recall,0.81
+456,50,Quantum ideal,precision,0.7363636363636363
+456,50,Quantum ideal,F1,0.7714285714285715
+456,50,Quantum ideal,ROC-AUC,0.9257249999999999
+456,50,Quantum ideal,accuracy,0.904
+456,50,RBF-SVM,PR-AUC,0.9330439458573646
+456,50,RBF-SVM,recall,0.82
+456,50,RBF-SVM,precision,0.9879518072289156
+456,50,RBF-SVM,F1,0.8961748633879781
+456,50,RBF-SVM,ROC-AUC,0.9582750000000001
+456,50,RBF-SVM,accuracy,0.962
+456,50,RBF-SVM,fit time,0.0014199999859556556
+456,50,RBF-SVM,prediction time,0.0015824000001884997
+456,50,Logistic regression,PR-AUC,0.909726770827503
+456,50,Logistic regression,recall,0.77
+456,50,Logistic regression,precision,0.9746835443037974
+456,50,Logistic regression,F1,0.8603351955307262
+456,50,Logistic regression,ROC-AUC,0.9377
+456,50,Logistic regression,accuracy,0.95
+456,50,Logistic regression,fit time,0.0037691000034101307
+456,50,Logistic regression,prediction time,0.0002533000078983605
+456,50,Random forest,PR-AUC,0.9334195038179012
+456,50,Random forest,recall,0.79
+456,50,Random forest,precision,0.9634146341463414
+456,50,Random forest,F1,0.8681318681318682
+456,50,Random forest,ROC-AUC,0.961575
+456,50,Random forest,accuracy,0.952
+456,50,Random forest,fit time,0.14494720002403483
+456,50,Random forest,prediction time,0.010156200005440041
+456,50,Classical (all features),PR-AUC,0.9017029281718495
+456,50,Classical (all features),recall,0.91
+456,50,Classical (all features),precision,0.8504672897196262
+456,50,Classical (all features),F1,0.8792270531400966
+456,50,Classical (all features),ROC-AUC,0.9617999999999999
+456,50,Classical (all features),accuracy,0.95
+456,50,Classical (all features),fit time,0.0019579000072553754
+456,50,Classical (all features),prediction time,0.0037665000127162784
+456,50,Best classical (CV-selected),PR-AUC,0.9330439458573646
+456,50,Quantum ideal,kernel time,0.6923209999804385
+456,50,Quantum ideal,fit time,0.0009626000246498734
+456,50,Quantum ideal,prediction time,0.00048180000158026814
+456,50,Quantum ideal,qubits,6.0
+456,50,Quantum ideal,depth,29.0
+456,50,Quantum ideal,gates,57.0
+456,50,Quantum ideal,two-qubit gates,30.0
+789,50,Quantum ideal,PR-AUC,0.836636392529986
+789,50,Quantum ideal,recall,0.81
+789,50,Quantum ideal,precision,0.826530612244898
+789,50,Quantum ideal,F1,0.8181818181818182
+789,50,Quantum ideal,ROC-AUC,0.9429
+789,50,Quantum ideal,accuracy,0.928
+789,50,RBF-SVM,PR-AUC,0.9020425781360054
+789,50,RBF-SVM,recall,0.77
+789,50,RBF-SVM,precision,0.9166666666666666
+789,50,RBF-SVM,F1,0.8369565217391305
+789,50,RBF-SVM,ROC-AUC,0.938225
+789,50,RBF-SVM,accuracy,0.94
+789,50,RBF-SVM,fit time,0.0015619999903719872
+789,50,RBF-SVM,prediction time,0.0014276000147219747
+789,50,Logistic regression,PR-AUC,0.8745289223145767
+789,50,Logistic regression,recall,0.78
+789,50,Logistic regression,precision,0.975
+789,50,Logistic regression,F1,0.8666666666666667
+789,50,Logistic regression,ROC-AUC,0.8881
+789,50,Logistic regression,accuracy,0.952
+789,50,Logistic regression,fit time,0.0022118999913800508
+789,50,Logistic regression,prediction time,0.00023549998877570033
+789,50,Random forest,PR-AUC,0.9082242790105176
+789,50,Random forest,recall,0.78
+789,50,Random forest,precision,0.9873417721518988
+789,50,Random forest,F1,0.8715083798882681
+789,50,Random forest,ROC-AUC,0.9468624999999999
+789,50,Random forest,accuracy,0.954
+789,50,Random forest,fit time,0.1477837999991607
+789,50,Random forest,prediction time,0.00804499999503605
+789,50,Classical (all features),PR-AUC,0.9120721356446683
+789,50,Classical (all features),recall,0.8
+789,50,Classical (all features),precision,0.8888888888888888
+789,50,Classical (all features),F1,0.8421052631578947
+789,50,Classical (all features),ROC-AUC,0.9596625
+789,50,Classical (all features),accuracy,0.94
+789,50,Classical (all features),fit time,0.0026760999753605574
+789,50,Classical (all features),prediction time,0.004199500021059066
+789,50,Best classical (CV-selected),PR-AUC,0.9082242790105176
+789,50,Quantum ideal,kernel time,0.7514080999826547
+789,50,Quantum ideal,fit time,0.0009017999982461333
+789,50,Quantum ideal,prediction time,0.0004926999972667545
+789,50,Quantum ideal,qubits,6.0
+789,50,Quantum ideal,depth,29.0
+789,50,Quantum ideal,gates,57.0
+789,50,Quantum ideal,two-qubit gates,30.0
+1000,50,Quantum ideal,PR-AUC,0.9176468137742718
+1000,50,Quantum ideal,recall,0.83
+1000,50,Quantum ideal,precision,0.8736842105263158
+1000,50,Quantum ideal,F1,0.8512820512820513
+1000,50,Quantum ideal,ROC-AUC,0.95525
+1000,50,Quantum ideal,accuracy,0.942
+1000,50,RBF-SVM,PR-AUC,0.9349992750761366
+1000,50,RBF-SVM,recall,0.87
+1000,50,RBF-SVM,precision,0.9456521739130435
+1000,50,RBF-SVM,F1,0.90625
+1000,50,RBF-SVM,ROC-AUC,0.96005
+1000,50,RBF-SVM,accuracy,0.964
+1000,50,RBF-SVM,fit time,0.0014344000082928687
+1000,50,RBF-SVM,prediction time,0.0015330000023823231
+1000,50,Logistic regression,PR-AUC,0.9448878124126425
+1000,50,Logistic regression,recall,0.86
+1000,50,Logistic regression,precision,0.9347826086956522
+1000,50,Logistic regression,F1,0.8958333333333334
+1000,50,Logistic regression,ROC-AUC,0.967375
+1000,50,Logistic regression,accuracy,0.96
+1000,50,Logistic regression,fit time,0.004708099993877113
+1000,50,Logistic regression,prediction time,0.0003090999962296337
+1000,50,Random forest,PR-AUC,0.9503366697992189
+1000,50,Random forest,recall,0.87
+1000,50,Random forest,precision,0.9666666666666667
+1000,50,Random forest,F1,0.9157894736842105
+1000,50,Random forest,ROC-AUC,0.9716
+1000,50,Random forest,accuracy,0.968
+1000,50,Random forest,fit time,0.14885440000216477
+1000,50,Random forest,prediction time,0.011711300001479685
+1000,50,Classical (all features),PR-AUC,0.9476777918142368
+1000,50,Classical (all features),recall,0.89
+1000,50,Classical (all features),precision,0.8725490196078431
+1000,50,Classical (all features),F1,0.8811881188118812
+1000,50,Classical (all features),ROC-AUC,0.9784250000000001
+1000,50,Classical (all features),accuracy,0.952
+1000,50,Classical (all features),fit time,0.0019274999795015901
+1000,50,Classical (all features),prediction time,0.006024600006639957
+1000,50,Best classical (CV-selected),PR-AUC,0.9448878124126425
+1000,50,Quantum ideal,kernel time,0.7607682999805547
+1000,50,Quantum ideal,fit time,0.0009464999893680215
+1000,50,Quantum ideal,prediction time,0.00042520000715740025
+1000,50,Quantum ideal,qubits,6.0
+1000,50,Quantum ideal,depth,29.0
+1000,50,Quantum ideal,gates,57.0
+1000,50,Quantum ideal,two-qubit gates,30.0
+2024,50,Quantum ideal,PR-AUC,0.8417256154635429
+2024,50,Quantum ideal,recall,0.89
+2024,50,Quantum ideal,precision,0.8317757009345794
+2024,50,Quantum ideal,F1,0.8599033816425121
+2024,50,Quantum ideal,ROC-AUC,0.9504499999999999
+2024,50,Quantum ideal,accuracy,0.942
+2024,50,RBF-SVM,PR-AUC,0.9217202723118444
+2024,50,RBF-SVM,recall,0.79
+2024,50,RBF-SVM,precision,0.9294117647058824
+2024,50,RBF-SVM,F1,0.8540540540540541
+2024,50,RBF-SVM,ROC-AUC,0.96685
+2024,50,RBF-SVM,accuracy,0.946
+2024,50,RBF-SVM,fit time,0.003355499997269362
+2024,50,RBF-SVM,prediction time,0.0015183000068645924
+2024,50,Logistic regression,PR-AUC,0.869314564505186
+2024,50,Logistic regression,recall,0.82
+2024,50,Logistic regression,precision,0.9425287356321839
+2024,50,Logistic regression,F1,0.8770053475935828
+2024,50,Logistic regression,ROC-AUC,0.932475
+2024,50,Logistic regression,accuracy,0.954
+2024,50,Logistic regression,fit time,0.004159500007517636
+2024,50,Logistic regression,prediction time,0.00032090002787299454
+2024,50,Random forest,PR-AUC,0.9362735261349924
+2024,50,Random forest,recall,0.87
+2024,50,Random forest,precision,0.8613861386138614
+2024,50,Random forest,F1,0.8656716417910447
+2024,50,Random forest,ROC-AUC,0.9665499999999999
+2024,50,Random forest,accuracy,0.946
+2024,50,Random forest,fit time,0.15472580000641756
+2024,50,Random forest,prediction time,0.008064800000283867
+2024,50,Classical (all features),PR-AUC,0.9592196422811383
+2024,50,Classical (all features),recall,0.93
+2024,50,Classical (all features),precision,0.8454545454545455
+2024,50,Classical (all features),F1,0.8857142857142857
+2024,50,Classical (all features),ROC-AUC,0.9734625
+2024,50,Classical (all features),accuracy,0.952
+2024,50,Classical (all features),fit time,0.0018631999846547842
+2024,50,Classical (all features),prediction time,0.005419399996753782
+2024,50,Best classical (CV-selected),PR-AUC,0.9362735261349924
+2024,50,Quantum ideal,kernel time,0.687764900008915
+2024,50,Quantum ideal,fit time,0.0010467999964021146
+2024,50,Quantum ideal,prediction time,0.0004938999773003161
+2024,50,Quantum ideal,qubits,6.0
+2024,50,Quantum ideal,depth,29.0
+2024,50,Quantum ideal,gates,57.0
+2024,50,Quantum ideal,two-qubit gates,30.0
+2025,50,Quantum ideal,PR-AUC,0.872239350529399
+2025,50,Quantum ideal,recall,0.78
+2025,50,Quantum ideal,precision,0.9069767441860465
+2025,50,Quantum ideal,F1,0.8387096774193549
+2025,50,Quantum ideal,ROC-AUC,0.9256249999999999
+2025,50,Quantum ideal,accuracy,0.94
+2025,50,RBF-SVM,PR-AUC,0.8964248831068496
+2025,50,RBF-SVM,recall,0.83
+2025,50,RBF-SVM,precision,0.7614678899082569
+2025,50,RBF-SVM,F1,0.7942583732057417
+2025,50,RBF-SVM,ROC-AUC,0.93625
+2025,50,RBF-SVM,accuracy,0.914
+2025,50,RBF-SVM,fit time,0.004337099991971627
+2025,50,RBF-SVM,prediction time,0.003682499984279275
+2025,50,Logistic regression,PR-AUC,0.8809676572189078
+2025,50,Logistic regression,recall,0.69
+2025,50,Logistic regression,precision,0.9857142857142858
+2025,50,Logistic regression,F1,0.8117647058823529
+2025,50,Logistic regression,ROC-AUC,0.9043000000000001
+2025,50,Logistic regression,accuracy,0.936
+2025,50,Logistic regression,fit time,0.006328100018436089
+2025,50,Logistic regression,prediction time,0.00036700000055134296
+2025,50,Random forest,PR-AUC,0.9104952768165668
+2025,50,Random forest,recall,0.83
+2025,50,Random forest,precision,0.9540229885057471
+2025,50,Random forest,F1,0.8877005347593583
+2025,50,Random forest,ROC-AUC,0.9332374999999999
+2025,50,Random forest,accuracy,0.958
+2025,50,Random forest,fit time,0.15040819998830557
+2025,50,Random forest,prediction time,0.008850699989125133
+2025,50,Classical (all features),PR-AUC,0.9129868420996085
+2025,50,Classical (all features),recall,0.85
+2025,50,Classical (all features),precision,0.8252427184466019
+2025,50,Classical (all features),F1,0.8374384236453202
+2025,50,Classical (all features),ROC-AUC,0.9456500000000001
+2025,50,Classical (all features),accuracy,0.934
+2025,50,Classical (all features),fit time,0.001889599981950596
+2025,50,Classical (all features),prediction time,0.0035336000146344304
+2025,50,Best classical (CV-selected),PR-AUC,0.8964248831068496
+2025,50,Quantum ideal,kernel time,0.7310984999930952
+2025,50,Quantum ideal,fit time,0.0008637999999336898
+2025,50,Quantum ideal,prediction time,0.000516200001584366
+2025,50,Quantum ideal,qubits,6.0
+2025,50,Quantum ideal,depth,29.0
+2025,50,Quantum ideal,gates,57.0
+2025,50,Quantum ideal,two-qubit gates,30.0
+2026,50,Quantum ideal,PR-AUC,0.9547696399110769
+2026,50,Quantum ideal,recall,0.84
+2026,50,Quantum ideal,precision,0.9438202247191011
+2026,50,Quantum ideal,F1,0.8888888888888888
+2026,50,Quantum ideal,ROC-AUC,0.97915
+2026,50,Quantum ideal,accuracy,0.958
+2026,50,RBF-SVM,PR-AUC,0.9492475727631046
+2026,50,RBF-SVM,recall,0.85
+2026,50,RBF-SVM,precision,0.9042553191489362
+2026,50,RBF-SVM,F1,0.8762886597938144
+2026,50,RBF-SVM,ROC-AUC,0.9734250000000001
+2026,50,RBF-SVM,accuracy,0.952
+2026,50,RBF-SVM,fit time,0.0015281999949365854
+2026,50,RBF-SVM,prediction time,0.002065700013190508
+2026,50,Logistic regression,PR-AUC,0.9551435525639738
+2026,50,Logistic regression,recall,0.91
+2026,50,Logistic regression,precision,0.8425925925925926
+2026,50,Logistic regression,F1,0.875
+2026,50,Logistic regression,ROC-AUC,0.9698749999999999
+2026,50,Logistic regression,accuracy,0.948
+2026,50,Logistic regression,fit time,0.002332500007469207
+2026,50,Logistic regression,prediction time,0.0002615999837871641
+2026,50,Random forest,PR-AUC,0.9492665705092779
+2026,50,Random forest,recall,0.88
+2026,50,Random forest,precision,0.967032967032967
+2026,50,Random forest,F1,0.9214659685863874
+2026,50,Random forest,ROC-AUC,0.9607499999999999
+2026,50,Random forest,accuracy,0.97
+2026,50,Random forest,fit time,0.17228110000723973
+2026,50,Random forest,prediction time,0.01132099999813363
+2026,50,Classical (all features),PR-AUC,0.9603108949157134
+2026,50,Classical (all features),recall,0.87
+2026,50,Classical (all features),precision,0.925531914893617
+2026,50,Classical (all features),F1,0.8969072164948454
+2026,50,Classical (all features),ROC-AUC,0.982025
+2026,50,Classical (all features),accuracy,0.96
+2026,50,Classical (all features),fit time,0.00192170002264902
+2026,50,Classical (all features),prediction time,0.005615800007944927
+2026,50,Best classical (CV-selected),PR-AUC,0.9492475727631046
+2026,50,Quantum ideal,kernel time,0.7312400999944657
+2026,50,Quantum ideal,fit time,0.0025926000089384615
+2026,50,Quantum ideal,prediction time,0.000824199989438057
+2026,50,Quantum ideal,qubits,6.0
+2026,50,Quantum ideal,depth,29.0
+2026,50,Quantum ideal,gates,57.0
+2026,50,Quantum ideal,two-qubit gates,30.0
+31415,50,Quantum ideal,PR-AUC,0.8969960884262886
+31415,50,Quantum ideal,recall,0.87
+31415,50,Quantum ideal,precision,0.7909090909090909
+31415,50,Quantum ideal,F1,0.8285714285714286
+31415,50,Quantum ideal,ROC-AUC,0.9588249999999999
+31415,50,Quantum ideal,accuracy,0.928
+31415,50,RBF-SVM,PR-AUC,0.9451288133591259
+31415,50,RBF-SVM,recall,0.89
+31415,50,RBF-SVM,precision,0.7672413793103449
+31415,50,RBF-SVM,F1,0.8240740740740741
+31415,50,RBF-SVM,ROC-AUC,0.9751
+31415,50,RBF-SVM,accuracy,0.924
+31415,50,RBF-SVM,fit time,0.0013747999910265207
+31415,50,RBF-SVM,prediction time,0.0017576999962329865
+31415,50,Logistic regression,PR-AUC,0.94562744038477
+31415,50,Logistic regression,recall,0.9
+31415,50,Logistic regression,precision,0.9278350515463918
+31415,50,Logistic regression,F1,0.9137055837563451
+31415,50,Logistic regression,ROC-AUC,0.964025
+31415,50,Logistic regression,accuracy,0.966
+31415,50,Logistic regression,fit time,0.005283699982101098
+31415,50,Logistic regression,prediction time,0.0004149999876972288
+31415,50,Random forest,PR-AUC,0.9608471023109507
+31415,50,Random forest,recall,0.9
+31415,50,Random forest,precision,0.9782608695652174
+31415,50,Random forest,F1,0.9375
+31415,50,Random forest,ROC-AUC,0.97775
+31415,50,Random forest,accuracy,0.976
+31415,50,Random forest,fit time,0.14314159998320974
+31415,50,Random forest,prediction time,0.008366900001419708
+31415,50,Classical (all features),PR-AUC,0.9404897552902994
+31415,50,Classical (all features),recall,0.92
+31415,50,Classical (all features),precision,0.8288288288288288
+31415,50,Classical (all features),F1,0.8720379146919431
+31415,50,Classical (all features),ROC-AUC,0.96655
+31415,50,Classical (all features),accuracy,0.946
+31415,50,Classical (all features),fit time,0.002106400002958253
+31415,50,Classical (all features),prediction time,0.003465899993898347
+31415,50,Best classical (CV-selected),PR-AUC,0.9404897552902994
+31415,50,Quantum ideal,kernel time,0.7457386000023689
+31415,50,Quantum ideal,fit time,0.0009301000100094825
+31415,50,Quantum ideal,prediction time,0.00048710001283325255
+31415,50,Quantum ideal,qubits,6.0
+31415,50,Quantum ideal,depth,29.0
+31415,50,Quantum ideal,gates,57.0
+31415,50,Quantum ideal,two-qubit gates,30.0
+27182,50,Quantum ideal,PR-AUC,0.9058935900185243
+27182,50,Quantum ideal,recall,0.86
+27182,50,Quantum ideal,precision,0.8349514563106796
+27182,50,Quantum ideal,F1,0.8472906403940886
+27182,50,Quantum ideal,ROC-AUC,0.9470000000000001
+27182,50,Quantum ideal,accuracy,0.938
+27182,50,RBF-SVM,PR-AUC,0.9306636319829626
+27182,50,RBF-SVM,recall,0.9
+27182,50,RBF-SVM,precision,0.8490566037735849
+27182,50,RBF-SVM,F1,0.8737864077669902
+27182,50,RBF-SVM,ROC-AUC,0.9628500000000001
+27182,50,RBF-SVM,accuracy,0.948
+27182,50,RBF-SVM,fit time,0.0013877999735996127
+27182,50,RBF-SVM,prediction time,0.001590800005942583
+27182,50,Logistic regression,PR-AUC,0.9251825608270147
+27182,50,Logistic regression,recall,0.81
+27182,50,Logistic regression,precision,0.9529411764705882
+27182,50,Logistic regression,F1,0.8756756756756757
+27182,50,Logistic regression,ROC-AUC,0.959325
+27182,50,Logistic regression,accuracy,0.954
+27182,50,Logistic regression,fit time,0.00259580000420101
+27182,50,Logistic regression,prediction time,0.0002601000014692545
+27182,50,Random forest,PR-AUC,0.938434303890725
+27182,50,Random forest,recall,0.85
+27182,50,Random forest,precision,0.9770114942528736
+27182,50,Random forest,F1,0.9090909090909091
+27182,50,Random forest,ROC-AUC,0.9601875
+27182,50,Random forest,accuracy,0.966
+27182,50,Random forest,fit time,0.14284759998554364
+27182,50,Random forest,prediction time,0.007367699989117682
+27182,50,Classical (all features),PR-AUC,0.9248245357757321
+27182,50,Classical (all features),recall,0.87
+27182,50,Classical (all features),precision,0.8969072164948454
+27182,50,Classical (all features),F1,0.883248730964467
+27182,50,Classical (all features),ROC-AUC,0.9594750000000001
+27182,50,Classical (all features),accuracy,0.954
+27182,50,Classical (all features),fit time,0.0017056000069715083
+27182,50,Classical (all features),prediction time,0.003055899986065924
+27182,50,Best classical (CV-selected),PR-AUC,0.9248245357757321
+27182,50,Quantum ideal,kernel time,0.6605259000207298
+27182,50,Quantum ideal,fit time,0.0009167000243905932
+27182,50,Quantum ideal,prediction time,0.0004400000034365803
+27182,50,Quantum ideal,qubits,6.0
+27182,50,Quantum ideal,depth,29.0
+27182,50,Quantum ideal,gates,57.0
+27182,50,Quantum ideal,two-qubit gates,30.0

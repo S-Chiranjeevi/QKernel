@@ -1,0 +1,433 @@
+{
+  "schema_version": "1.0",
+  "run_id": "20261005T183851Z-f60a57db6602",
+  "created_at": "2026-10-05T18:39:18.313090+00:00",
+  "synthetic": false,
+  "config_hash": "47308170bbbbec3165e9739a2791f1f4b119524fd2fc6a52a8588d9614786936",
+  "dataset": {
+    "name": "creditcard.csv",
+    "sha256": "76274b691b16a6c49d3f159c883398e03ccd6d1ee12d9d8ee38f4b4b98551a89",
+    "rows": 284807,
+    "fraud_count": 492,
+    "legitimate_count": 284315
+  },
+  "config": {
+    "mode": "benchmark",
+    "fraud_labels": 10,
+    "seed_count": 10,
+    "seeds": [
+      42,
+      123,
+      456,
+      789,
+      1000,
+      2024,
+      2025,
+      2026,
+      31415,
+      27182
+    ],
+    "train_normal_count": 200,
+    "train_fraud_count": 10,
+    "test_fraud_count": 100,
+    "test_normal_count": 400,
+    "qubits": 6,
+    "repeats": 1,
+    "entangle": true,
+    "log1p_amount": false,
+    "environment": "ideal exact statevector"
+  },
+  "preprocessing": {
+    "fit_on_training_only": true,
+    "features": [
+      "V1",
+      "V2",
+      "V3",
+      "V4",
+      "V5",
+      "V6",
+      "V7",
+      "V8",
+      "V9",
+      "V10",
+      "V11",
+      "V12",
+      "V13",
+      "V14",
+      "V15",
+      "V16",
+      "V17",
+      "V18",
+      "V19",
+      "V20",
+      "V21",
+      "V22",
+      "V23",
+      "V24",
+      "V25",
+      "V26",
+      "V27",
+      "V28",
+      "Amount"
+    ],
+    "pca_explained_variance_mean": [
+      0.265943877540803,
+      0.10021489192348884,
+      0.0643275756829482,
+      0.05319096581487426,
+      0.04807110593682666,
+      0.04371157630071648
+    ]
+  },
+  "artifacts": {
+    "metrics": "metrics.csv",
+    "predictions": "predictions.csv",
+    "kernel_train": "kernel_train.npz"
+  },
+  "kernel_heatmap": {
+    "artifact": "kernel_train.npz",
+    "fraud_rows_first": true,
+    "divider_after": 10,
+    "matrix_size": 210,
+    "seed_count": 10
+  },
+  "metrics": [
+    {
+      "model": "Best classical (CV-selected)",
+      "metric": "PR-AUC",
+      "mean": 0.9129591925788849,
+      "std": 0.02389522613094232,
+      "seed_count": 10
+    },
+    {
+      "model": "Classical (all features)",
+      "metric": "F1",
+      "mean": 0.7064310738913182,
+      "std": 0.2564124748823907,
+      "seed_count": 10
+    },
+    {
+      "model": "Classical (all features)",
+      "metric": "PR-AUC",
+      "mean": 0.9019301487743441,
+      "std": 0.044034632809081875,
+      "seed_count": 10
+    },
+    {
+      "model": "Classical (all features)",
+      "metric": "ROC-AUC",
+      "mean": 0.95272375,
+      "std": 0.016728921698081878,
+      "seed_count": 10
+    },
+    {
+      "model": "Classical (all features)",
+      "metric": "accuracy",
+      "mean": 0.8874000000000001,
+      "std": 0.0522987146644691,
+      "seed_count": 10
+    },
+    {
+      "model": "Classical (all features)",
+      "metric": "fit time",
+      "mean": 0.002390300002298318,
+      "std": 0.0007332207813572978,
+      "seed_count": 10
+    },
+    {
+      "model": "Classical (all features)",
+      "metric": "precision",
+      "mean": 0.6327998760774889,
+      "std": 0.2455628487554526,
+      "seed_count": 10
+    },
+    {
+      "model": "Classical (all features)",
+      "metric": "prediction time",
+      "mean": 0.006114180004806258,
+      "std": 0.0011880205824527947,
+      "seed_count": 10
+    },
+    {
+      "model": "Classical (all features)",
+      "metric": "recall",
+      "mean": 0.8130000000000001,
+      "std": 0.2874814003645376,
+      "seed_count": 10
+    },
+    {
+      "model": "Logistic regression",
+      "metric": "F1",
+      "mean": 0.8496369785050815,
+      "std": 0.07155499794870432,
+      "seed_count": 10
+    },
+    {
+      "model": "Logistic regression",
+      "metric": "PR-AUC",
+      "mean": 0.905712730303595,
+      "std": 0.03226023115568243,
+      "seed_count": 10
+    },
+    {
+      "model": "Logistic regression",
+      "metric": "ROC-AUC",
+      "mean": 0.9380499999999999,
+      "std": 0.013988973832590028,
+      "seed_count": 10
+    },
+    {
+      "model": "Logistic regression",
+      "metric": "accuracy",
+      "mean": 0.9484,
+      "std": 0.02032622826683678,
+      "seed_count": 10
+    },
+    {
+      "model": "Logistic regression",
+      "metric": "fit time",
+      "mean": 0.00397227999928873,
+      "std": 0.0015780462752316665,
+      "seed_count": 10
+    },
+    {
+      "model": "Logistic regression",
+      "metric": "precision",
+      "mean": 0.9878244514106583,
+      "std": 0.01780751439751589,
+      "seed_count": 10
+    },
+    {
+      "model": "Logistic regression",
+      "metric": "prediction time",
+      "mean": 0.0006595699960598722,
+      "std": 0.0008181990900489801,
+      "seed_count": 10
+    },
+    {
+      "model": "Logistic regression",
+      "metric": "recall",
+      "mean": 0.752,
+      "std": 0.10507140429250957,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "F1",
+      "mean": 0.7850722079947823,
+      "std": 0.03633740520998164,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "PR-AUC",
+      "mean": 0.8289395690742285,
+      "std": 0.07739452627860607,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "ROC-AUC",
+      "mean": 0.9313274999999999,
+      "std": 0.022971677761249157,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "accuracy",
+      "mean": 0.9132000000000001,
+      "std": 0.015178932768808233,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "depth",
+      "mean": 29.0,
+      "std": 0.0,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "fit time",
+      "mean": 0.0009419799956958741,
+      "std": 0.00029747268113308544,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "gates",
+      "mean": 57.0,
+      "std": 0.0,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "kernel time",
+      "mean": 0.6444914699939546,
+      "std": 0.018130373378764403,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "precision",
+      "mean": 0.7828019022843533,
+      "std": 0.06163799651821796,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "prediction time",
+      "mean": 0.0004533899948000908,
+      "std": 6.327427395343871e-05,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "qubits",
+      "mean": 6.0,
+      "std": 0.0,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "recall",
+      "mean": 0.7950000000000002,
+      "std": 0.07137537701787951,
+      "seed_count": 10
+    },
+    {
+      "model": "Quantum ideal",
+      "metric": "two-qubit gates",
+      "mean": 30.0,
+      "std": 0.0,
+      "seed_count": 10
+    },
+    {
+      "model": "RBF-SVM",
+      "metric": "F1",
+      "mean": 0.8025448778002913,
+      "std": 0.081978992072043,
+      "seed_count": 10
+    },
+    {
+      "model": "RBF-SVM",
+      "metric": "PR-AUC",
+      "mean": 0.9169913947007083,
+      "std": 0.025780208107696465,
+      "seed_count": 10
+    },
+    {
+      "model": "RBF-SVM",
+      "metric": "ROC-AUC",
+      "mean": 0.9525325,
+      "std": 0.019161985116660278,
+      "seed_count": 10
+    },
+    {
+      "model": "RBF-SVM",
+      "metric": "accuracy",
+      "mean": 0.9334000000000001,
+      "std": 0.02195044924875619,
+      "seed_count": 10
+    },
+    {
+      "model": "RBF-SVM",
+      "metric": "fit time",
+      "mean": 0.0013238399929832666,
+      "std": 0.00010844899855844161,
+      "seed_count": 10
+    },
+    {
+      "model": "RBF-SVM",
+      "metric": "precision",
+      "mean": 0.9575847004041,
+      "std": 0.04235836646683833,
+      "seed_count": 10
+    },
+    {
+      "model": "RBF-SVM",
+      "metric": "prediction time",
+      "mean": 0.0021146400045836343,
+      "std": 0.0010116205793171704,
+      "seed_count": 10
+    },
+    {
+      "model": "RBF-SVM",
+      "metric": "recall",
+      "mean": 0.702,
+      "std": 0.12336035739968401,
+      "seed_count": 10
+    },
+    {
+      "model": "Random forest",
+      "metric": "F1",
+      "mean": 0.8659258259494702,
+      "std": 0.057721129152720985,
+      "seed_count": 10
+    },
+    {
+      "model": "Random forest",
+      "metric": "PR-AUC",
+      "mean": 0.9110031327757625,
+      "std": 0.033866730798916674,
+      "seed_count": 10
+    },
+    {
+      "model": "Random forest",
+      "metric": "ROC-AUC",
+      "mean": 0.9391737499999999,
+      "std": 0.02631535016893915,
+      "seed_count": 10
+    },
+    {
+      "model": "Random forest",
+      "metric": "accuracy",
+      "mean": 0.953,
+      "std": 0.01731409188429406,
+      "seed_count": 10
+    },
+    {
+      "model": "Random forest",
+      "metric": "fit time",
+      "mean": 0.13954681000031996,
+      "std": 0.00821810958061042,
+      "seed_count": 10
+    },
+    {
+      "model": "Random forest",
+      "metric": "precision",
+      "mean": 0.98813090036146,
+      "std": 0.014302486337025952,
+      "seed_count": 10
+    },
+    {
+      "model": "Random forest",
+      "metric": "prediction time",
+      "mean": 0.007530829994357191,
+      "std": 0.0006512059095408404,
+      "seed_count": 10
+    },
+    {
+      "model": "Random forest",
+      "metric": "recall",
+      "mean": 0.7739999999999999,
+      "std": 0.08248905651323965,
+      "seed_count": 10
+    }
+  ],
+  "verdict": {
+    "overall": "Classical preferred",
+    "paired_difference_mean": -0.08401962350465636,
+    "interval_95_t": [
+      -0.14436347151942722,
+      -0.023675775489885496
+    ]
+  },
+  "limitations": [
+    "Ideal software statevector simulation; no hardware execution.",
+    "This benchmark run reports ideal kernels only. Noisy and mitigated comparisons are separate run types.",
+    "Balanced test subset does not represent natural fraud prevalence.",
+    "Classical RBF-SVM and logistic regression grids are selected by training-only CV; random forest uses 200 trees.",
+    "Decision thresholds are selected from training-only out-of-fold scores; this is a research implementation that still needs independent protocol review."
+  ]
+}
