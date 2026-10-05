@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.mplconfig/
+node_modules/
+frontend/dist/
+results/*
+!results/.gitkeep
+datasets/*
+!datasets/README.md
+uploads/
+.env
+
+*.tsbuildinfo
