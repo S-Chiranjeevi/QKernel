@@ -26,6 +26,7 @@ os.environ.setdefault("MPLCONFIGDIR", str(ROOT / ".mplconfig"))
 Path(os.environ["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD = 250 * 1024 * 1024
 REQUIRED = {*(f"V{i}" for i in range(1, 29)), "Time", "Amount", "Class"}
+IDEAL_SEEDS = [42, 123, 456, 789, 1000, 2024, 2025, 2026, 31415, 27182]
 dataset: dict[str, Any] = {"frame": None, "name": None, "sha256": None, "synthetic": False}
 jobs: dict[str, dict[str, Any]] = {}
 lock = threading.Lock()
@@ -316,14 +317,15 @@ def create_job(req: JobRequest):
         raise HTTPException(400, "This protocol needs at least 100 fraud rows, k additional training frauds, and 600 legitimate rows.")
     if log_amount and bool((frame.Amount<0).any()): raise HTTPException(400,"log1p(Amount) needs non-negative amount values. Turn it off or clean the CSV.")
     job_id = uuid.uuid4().hex[:12]
+    seed_values = IDEAL_SEEDS[:seeds]
     jobs[job_id] = {"job_id": job_id, "type": "benchmark", "status": "queued", "progress": 0,
                     "message": "Waiting for a local worker.", "cancel_requested": False,
                     "synthetic": bool(dataset.get("synthetic",False)), "label": "Software simulation"}
-    threading.Thread(target=_run_benchmark, args=(job_id, frame, k, seeds, qubits, repeats, entangle, log_amount, bool(dataset.get("synthetic",False)), dataset["name"], dataset["sha256"]), daemon=True).start()
+    threading.Thread(target=_run_benchmark, args=(job_id, frame, k, seeds, seed_values, qubits, repeats, entangle, log_amount, bool(dataset.get("synthetic",False)), dataset["name"], dataset["sha256"]), daemon=True).start()
     return {"job_id": job_id, "status": "queued", "message": "Benchmark queued on this computer."}
 
 
-def _run_benchmark(job_id: str, frame, k: int, seed_count: int, qubits: int, repeats: int, entangle: bool, log_amount: bool, synthetic: bool, dataset_name: str, dataset_hash: str):
+def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: list[int], qubits: int, repeats: int, entangle: bool, log_amount: bool, synthetic: bool, dataset_name: str, dataset_hash: str):
     """Run the ideal local benchmark. Outputs are written only after completion."""
     import numpy as np
     from qiskit import QuantumCircuit
@@ -372,7 +374,7 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, qubits: int, rep
         X = frame[features].to_numpy(dtype=float); y = frame.Class.to_numpy(dtype=int)
         if log_amount: X[:,features.index("Amount")]=np.log1p(X[:,features.index("Amount")])
         positives = np.flatnonzero(y == 1); negatives = np.flatnonzero(y == 0)
-        for n, seed in enumerate(range(seed_count)):
+        for n, seed in enumerate(seed_values):
             if jobs[job_id].get("cancel_requested"):
                 jobs[job_id].update(status="cancelled", message="Run cancelled. No partial run was saved."); return
             rng = np.random.default_rng(seed)
@@ -392,7 +394,7 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, qubits: int, rep
             angle = MinMaxScaler(feature_range=(0, math.pi), clip=True).fit(ztr)
             atr, ate = angle.transform(ztr), angle.transform(zte)
             prep_s = time.perf_counter() - t0; variances.append(pca.explained_variance_ratio_.tolist())
-            progress(round(5 + 85*n/seed_count), f"Seed {seed+1}/{seed_count}: computing ideal kernels")
+            progress(round(5 + 85*n/seed_count), f"Seed {n+1}/{seed_count} (random state {seed}): computing ideal kernels")
             t0 = time.perf_counter(); Ktr = matrix(atr, atr, repeats, entangle); Kte = matrix(ate, atr, repeats, entangle); kernel_s = time.perf_counter()-t0
             order=np.argsort(-ytr,kind="stable")
             kernel_artifacts.append(Ktr[np.ix_(order,order)])
@@ -464,7 +466,7 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, qubits: int, rep
             vals=group.value.to_numpy();summary.append({"model":model_name,"metric":metric,"mean":float(np.mean(vals)),"std":float(np.std(vals,ddof=1)) if len(vals)>1 else 0.0,"seed_count":int(len(vals))})
         quantum=np.array([r["value"] for r in rows if r["model"]=="Quantum ideal" and r["metric"]=="PR-AUC"])
         classical_by_seed=[]
-        for seed in range(seed_count):
+        for seed in seed_values:
             vals=[r["value"] for r in rows if r["seed"]==seed and r["metric"]=="PR-AUC" and r["model"]=="Best classical (CV-selected)"]
             classical_by_seed.append(max(vals) if vals else 0)
         differences=quantum-np.array(classical_by_seed)
@@ -483,7 +485,7 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, qubits: int, rep
         class_frame=prediction_frame.pop("classical_predictions").apply(pd.Series).add_prefix("prediction_")
         pd.concat([prediction_frame,score_frame,class_frame],axis=1).to_csv(out/"predictions.csv",index=False)
         np.savez_compressed(out/"kernel_train.npz",**{f"seed_{i}":matrix for i,matrix in enumerate(kernel_artifacts)})
-        config={"mode":"benchmark","fraud_labels":k,"seed_count":seed_count,"seeds":list(range(seed_count)),"train_normal_count":200,"train_fraud_count":k,"test_fraud_count":100,"test_normal_count":400,"qubits":qubits,"repeats":repeats,"entangle":entangle,"log1p_amount":log_amount,"environment":"ideal exact statevector"}
+        config={"mode":"benchmark","fraud_labels":k,"seed_count":seed_count,"seeds":seed_values,"train_normal_count":200,"train_fraud_count":k,"test_fraud_count":100,"test_normal_count":400,"qubits":qubits,"repeats":repeats,"entangle":entangle,"log1p_amount":log_amount,"environment":"ideal exact statevector"}
         run={"schema_version":"1.0","run_id":run_id,"created_at":datetime.now(timezone.utc).isoformat(),"synthetic":synthetic,"config_hash":hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest(),"dataset":{"name":dataset_name,"sha256":dataset_hash,"rows":len(frame),"fraud_count":int(y.sum()),"legitimate_count":int((y==0).sum())},"config":config,"preprocessing":{"fit_on_training_only":True,"features":features,"pca_explained_variance_mean":np.mean(variances,axis=0).tolist()},"artifacts":{"metrics":"metrics.csv","predictions":"predictions.csv","kernel_train":"kernel_train.npz"},"kernel_heatmap":{"artifact":"kernel_train.npz","fraud_rows_first":True,"divider_after":k,"matrix_size":200+k,"seed_count":seed_count},"metrics":summary,"verdict":{"overall":verdict,"paired_difference_mean":float(differences.mean()),"interval_95_t":interval},"limitations":["Ideal software statevector simulation; no hardware execution.","This benchmark run reports ideal kernels only. Noisy and mitigated comparisons are separate run types.","Balanced test subset does not represent natural fraud prevalence.","Classical RBF-SVM and logistic regression grids are selected by training-only CV; random forest uses 200 trees.","Decision thresholds are selected from training-only out-of-fold scores; this is a research implementation that still needs independent protocol review."]}
         (out/"run.json").write_text(json.dumps(run,indent=2),encoding="utf-8")
         jobs[job_id].update(status="completed",progress=100,message="Ideal benchmark completed.",run_id=run_id)

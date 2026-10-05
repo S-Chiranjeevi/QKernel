@@ -47,6 +47,12 @@ memory; they are not written to disk. Do not expose this local API to a public
 network or share saved row-level prediction files without checking the data
 license and privacy requirements.
 
+For the canonical ULB/Worldline dataset, place `creditcard.csv` at
+`datasets/raw/creditcard.csv`. That directory is ignored by Git. The default
+ideal benchmark uses the reproducible seed list
+`42, 123, 456, 789, 1000, 2024, 2025, 2026, 31415, 27182`; selecting fewer
+seeds uses a prefix of this list.
+
 The ideal benchmark requires at least 100 fraud rows, 600 legitimate rows,
 and an additional `k` training fraud rows (k = 6, 10, 20, or 50). It samples
 200 legitimate and k fraud training rows, then tests on 100 unseen fraud and
