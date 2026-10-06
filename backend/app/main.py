@@ -470,7 +470,7 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
             for metric,value in values.items():rows.append({"seed":seed,"fraud_labels":k,"model":"Quantum ideal","metric":metric,"value":float(value)})
             for i,idx in enumerate(test_ids):predictions.append({"seed":seed,"row_id":int(idx),"amount":float(frame.iloc[idx]["Amount"]),"actual":int(yte[i]),"quantum_score":float(decision[i]),"quantum_prediction":int(pred[i]),"classical_scores":{},"classical_predictions":{}})
             from sklearn.model_selection import cross_val_predict, cross_val_score
-            best_classical_cv=-1.0; best_classical_test=0.0; best_classical_name=""; best_classical_clf=None; best_classical_thresh=0.5
+            best_classical_cv=-1.0; best_classical_test=0.0; best_classical_name=""; best_classical_clf=None; best_classical_thresh=0.5; best_classical_reference=None
             for j,name in enumerate(["RBF-SVM","Logistic regression","Random forest","Classical (all features)"]):
                 from sklearn.preprocessing import StandardScaler as SS
                 tx=X[train_ids] if name=="Classical (all features)" else ztr
@@ -495,7 +495,7 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
                 for row_i,score_value in enumerate(cs): predictions[-len(test_ids)+row_i]["classical_scores"][name]=float(score_value)
                 for row_i,predicted_value in enumerate(cp): predictions[-len(test_ids)+row_i]["classical_predictions"][name]=int(predicted_value)
                 if cv_mean > best_classical_cv:
-                    best_classical_cv=cv_mean; best_classical_test=float(cvals["PR-AUC"]); best_classical_name=name; best_classical_clf=clf; best_classical_thresh=threshold
+                    best_classical_cv=cv_mean; best_classical_test=float(cvals["PR-AUC"]); best_classical_name=name; best_classical_clf=clf; best_classical_thresh=threshold; best_classical_reference=np.asarray(oof_scores,dtype=float).ravel().tolist()
             rows.append({"seed":seed,"fraud_labels":k,"model":"Best classical (CV-selected)","metric":"PR-AUC","value":best_classical_test})
             for prediction in predictions[-len(test_ids):]:
                 prediction["best_classical_name"]=best_classical_name
@@ -504,6 +504,8 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
                 "qubits": qubits, "repeats": repeats, "entangle": entangle,
                 "log_amount": log_amount, "features": features, "q_threshold": q_threshold,
                 "quantum_model": model, "quantum_train_angles": atr, "quantum_train_y": ytr,
+                "quantum_reference_scores": np.asarray(oof,dtype=float).ravel().tolist(),
+                "classical_reference_scores": best_classical_reference,
                 "scaler": scaler, "pca": pca, "angle": angle,
                 "best_classical_name": best_classical_name, "best_classical_model": best_classical_clf,
                 "classical_threshold": best_classical_thresh
@@ -898,6 +900,8 @@ def _fit_model_bundle_for_run(run_data: dict, frame):
         "quantum_model": q_model,
         "quantum_train_angles": atr,
         "quantum_train_y": ytr,
+        "quantum_reference_scores": np.asarray(oof,dtype=float).ravel().tolist(),
+        "classical_reference_scores": np.asarray(oof_c,dtype=float).ravel().tolist(),
         "scaler": scaler,
         "pca": pca,
         "angle": angle,
@@ -994,6 +998,23 @@ def score(req: ScoreRequest):
     q_score = float(q_model.decision_function([k_vec])[0])
     q_thresh = float(bundle["q_threshold"])
     q_pred = int(q_score >= q_thresh)
+    # Exact additive SVC decomposition: sum(alpha_i * y_i * K(x_i, x)) + intercept.
+    support_ids = np.asarray(q_model.support_, dtype=int)
+    dual = np.asarray(q_model.dual_coef_[0], dtype=float)
+    support_contributions = dual * k_vec[support_ids]
+    order = np.argsort(np.abs(support_contributions))[::-1][:5]
+    strongest = max(float(np.max(np.abs(support_contributions))), 1e-12)
+    contribution_trace = [{
+        "support_vector": int(support_ids[i]) + 1,
+        "label": "fraud" if int(bundle["quantum_train_y"][support_ids[i]]) == 1 else "legitimate",
+        "kernel_similarity": round(float(k_vec[support_ids[i]]), 6),
+        "contribution": round(float(support_contributions[i]), 6),
+        "relative_strength": round(float(abs(support_contributions[i]) / strongest), 4),
+    } for i in order]
+    intercept = float(np.asarray(q_model.intercept_).ravel()[0])
+    reconstructed = float(np.sum(support_contributions) + intercept)
+    reference = np.asarray(bundle.get("quantum_reference_scores", []), dtype=float)
+    rank_percentile = float(np.mean(reference <= q_score) * 100.0) if reference.size else None
 
     clf = bundle["best_classical_model"]
     c_thresh = float(bundle["classical_threshold"])
@@ -1012,8 +1033,16 @@ def score(req: ScoreRequest):
         "is_fraud": bool(q_pred == 1),
         "decision": "FRAUD" if q_pred == 1 else "LEGITIMATE",
         "verdict": "FRAUD" if q_pred == 1 else "LEGITIMATE",
-        "support_vectors_count": len(bundle["quantum_train_angles"]),
-        "rank_percentile": 99.4 if q_pred == 1 else 12.3
+        "support_vectors_count": len(q_model.support_),
+        "rank_percentile": round(rank_percentile, 1) if rank_percentile is not None else None,
+        "explanation": {
+            "method": "Exact quantum-kernel SVC support-vector decomposition",
+            "intercept": round(intercept, 6),
+            "reconstructed_score": round(reconstructed, 6),
+            "reconstruction_error": round(abs(reconstructed - q_score), 10),
+            "top_support_vectors": contribution_trace,
+            "caveat": "This explains the model margin through kernel support vectors; it is not a causal or per-feature explanation."
+        }
     }
     c_dict = {
         "model_name": bundle.get("best_classical_name", "Random forest"),

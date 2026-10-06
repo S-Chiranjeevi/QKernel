@@ -75,6 +75,10 @@ are fit using training data only.
   remain quick demos, not full-protocol benchmark evidence.
 - Result listing/export, saved prediction exploration, and saved ideal
   training-kernel heatmaps.
+- Persisted-model live scoring with an exact quantum-kernel SVC support-vector
+  contribution trace, a reference percentile from cross-validated training
+  scores, and a UI-only threshold policy sandbox. The contribution trace is a
+  model-margin explanation, not a per-feature causal explanation.
 
 ## Research limits to keep visible
 
@@ -85,9 +89,10 @@ protocol for noisy or mitigated runs.
 The ideal benchmark currently uses a fixed feature-map configuration per run;
 there is no automated entanglement/repeat ablation grid or cross-run replay
 button. There is no kernel cache, thermal-relaxation noise, shots-versus-PR-AUC
-sweep, or full one-click judge demo. The transaction scorer is a UI placeholder;
-it does not accept arbitrary transactions or load a persisted model. Saved
-runs include JSON and CSV exports; a Markdown report export is not implemented.
+sweep, or full one-click judge demo. Live decision scores are not calibrated
+probabilities; the threshold sandbox is exploratory and does not retrain the
+model or establish a production operating point. Saved runs include JSON and
+CSV exports; a Markdown report export is not implemented.
 
 Treat every result as prototype research output. Simulation time is not
 quantum-hardware performance. Accuracy can mislead when fraud is rare. A
