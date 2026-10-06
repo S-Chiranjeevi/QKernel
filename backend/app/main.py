@@ -20,9 +20,12 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[2]
-RESULTS = ROOT / "results"
-RESULTS.mkdir(exist_ok=True)
-os.environ.setdefault("MPLCONFIGDIR", str(ROOT / ".mplconfig"))
+# On Vercel (and other read-only filesystems) only /tmp is writable.
+# Fall back to /tmp/qkernel so the app starts without crashing.
+_writable = Path("/tmp/qkernel") if os.environ.get("VERCEL") or not os.access(ROOT, os.W_OK) else ROOT
+RESULTS = _writable / "results"
+RESULTS.mkdir(parents=True, exist_ok=True)
+os.environ.setdefault("MPLCONFIGDIR", str(_writable / ".mplconfig"))
 Path(os.environ["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD = 250 * 1024 * 1024
 REQUIRED = {*(f"V{i}" for i in range(1, 29)), "Time", "Amount", "Class"}

@@ -1,0 +1,12 @@
+# Vercel deployment requirements — Qiskit and Aer are excluded because
+# they exceed Vercel's 250 MB bundle limit and require native binaries.
+# All Qiskit-dependent endpoints already return HTTP 503 when the
+# libraries are absent, so the app degrades gracefully.
+# Dataset, demo generation, results listing, and scoring work fully.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2.8,<3
+python-multipart>=0.0.9
+numpy>=1.26
+pandas>=2.2
+scikit-learn>=1.5
