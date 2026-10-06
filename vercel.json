@@ -12,6 +12,7 @@
     }
   },
   "env": {
-    "VERCEL": "1"
+    "VERCEL": "1",
+    "VITE_API_URL": ""
   }
 }
