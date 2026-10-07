@@ -8,6 +8,12 @@ with the project.
 
 ## Start the application
 
+The full research workflow requires the local FastAPI worker. Vercel is a
+presentation preview only: its API is serverless, cannot read local file paths,
+and does not guarantee in-memory datasets, background jobs, or saved results
+between requests. The UI and API both disclose this mode and reject workflows
+that depend on persistent local state.
+
 Requirements: Python 3.11 or newer and Node.js 20 or newer.
 
 From the project root, install backend packages and create the local
@@ -67,14 +73,23 @@ are fit using training data only.
 - Background, cancellable ideal benchmark jobs with ten configurable seeds,
   training-only CV for model selection, classical baselines, stored metrics,
   test-set decision scores, and paired per-seed verdicts.
+- Eight-configuration entanglement ablation (k = 6, 10, 20, 50 × RZZ on/off)
+  and nine-configuration feature-map scaling sweep (4/6/8 qubits × 1/2/3
+  repeats), each with mean ± standard deviation across seeds.
+- A 256/1024/4096 shot sweep with seed standard-deviation error bars, and a
+  local one-click judge demo that sequences ideal, noisy, and mitigated runs.
+- A SHA-256-keyed, 512 MiB-bounded local kernel-matrix cache keyed by dataset,
+  data splits, preprocessing, and feature-map configuration.
+- Cross-run configuration replay and a saved-run review with run-specific
+  metrics, verdict, configuration, and kernel heatmap.
 - An exact local runtime estimate for ideal kernel construction. It does not
   include CV/model fitting and is an extrapolation, not a completion-time
   guarantee.
 - Four-qubit Qiskit Aer noise and zero-noise extrapolation demonstrations across
   three or five independent seeds, each using a balanced 60-row subset. These
   remain quick demos, not full-protocol benchmark evidence.
-- Result listing/export, saved prediction exploration, and saved ideal
-  training-kernel heatmaps.
+- Result listing/export, including the Markdown report, saved prediction
+  exploration, and saved ideal training-kernel heatmaps.
 - Persisted-model live scoring with an exact quantum-kernel SVC support-vector
   contribution trace, a reference percentile from cross-validated training
   scores, and a UI-only threshold policy sandbox. The contribution trace is a
@@ -86,13 +101,14 @@ The ideal benchmark and small noisy/ZNE demonstration are separate protocols.
 The noise demonstration uses at least three seeds and a fixed 30/30 balanced
 subset per seed; it does not implement the full 100-fraud/400-normal test
 protocol for noisy or mitigated runs.
-The ideal benchmark currently uses a fixed feature-map configuration per run;
-there is no automated entanglement/repeat ablation grid or cross-run replay
-button. There is no kernel cache, thermal-relaxation noise, shots-versus-PR-AUC
-sweep, or full one-click judge demo. Live decision scores are not calibrated
-probabilities; the threshold sandbox is exploratory and does not retrain the
-model or establish a production operating point. Saved runs include JSON and
-CSV exports; a Markdown report export is not implemented.
+The ablation grids and shot sweep run as multiple independent jobs and may be
+long; the estimator covers kernel/simulator work and is not a completion-time
+guarantee. Noise sweeps use balanced demo subsets, not the full ideal benchmark
+protocol. Thermal-relaxation noise is not modeled. Live decision scores are not
+calibrated probabilities; the threshold sandbox is exploratory and does not
+retrain the model or establish a production operating point. Vercel remains a
+presentation preview; use the local API for reproducible experiments and
+persistent results.
 
 Treat every result as prototype research output. Simulation time is not
 quantum-hardware performance. Accuracy can mislead when fraud is rare. A
@@ -112,3 +128,8 @@ The UI uses ink `#17232D`, paper `#F4F2EC`, slate `#64717A`, rust `#A94F35`,
 moss `#557565`, and gold `#B38A3E`; DM Sans for reading and DM Mono for
 measurements. It supports system dark mode, reduced motion, and responsive
 layouts.
+
+The Vercel preview sets `execution_mode=vercel-serverless`; `/api/jobs`,
+dataset-session endpoints, and persisted-model scoring return HTTP 503 there.
+This is deliberate so a transient function does not present an in-memory job as
+a durable experiment. The full experiment worker is the local Uvicorn process.

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
@@ -25,6 +25,9 @@ ROOT = Path(__file__).resolve().parents[2]
 _writable = Path("/tmp/qkernel") if os.environ.get("VERCEL") or not os.access(ROOT, os.W_OK) else ROOT
 RESULTS = _writable / "results"
 RESULTS.mkdir(parents=True, exist_ok=True)
+KERNEL_CACHE = RESULTS / "kernel-cache"
+KERNEL_CACHE.mkdir(parents=True, exist_ok=True)
+KERNEL_CACHE_LIMIT = 512 * 1024 * 1024
 os.environ.setdefault("MPLCONFIGDIR", str(_writable / ".mplconfig"))
 Path(os.environ["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD = 250 * 1024 * 1024
@@ -89,7 +92,13 @@ def _statistics(frame):
 @app.get("/api/health")
 def health():
     default_csv = (ROOT / "datasets" / "raw" / "creditcard.csv").is_file()
-    return {"status": "ok", "mode": "local software simulation", "dataset_loaded": dataset["frame"] is not None,
+    serverless = bool(os.environ.get("VERCEL"))
+    return {"status": "ok", "mode": "local software simulation",
+            "execution_mode": "vercel-serverless" if serverless else "local-worker",
+            "persistent_background_jobs": not serverless,
+            "persistent_results": not serverless,
+            "supports_local_paths": not serverless,
+            "dataset_loaded": dataset["frame"] is not None,
             "dataset_name": dataset.get("name"), "default_dataset_available": default_csv,
             "results_count": len(list(RESULTS.glob("*/run.json")))}
 
@@ -97,6 +106,8 @@ def health():
 @app.post("/api/dataset/demo")
 def generate_demo_dataset():
     """Generate a realistic synthetic credit-card dataset for immediate research testing."""
+    if os.environ.get("VERCEL"):
+        raise HTTPException(503, "Dataset sessions are temporary on Vercel. Run the local FastAPI app for experiments.")
     pd = _pd()
     import numpy as np
     rng = np.random.default_rng(42)
@@ -133,6 +144,8 @@ def generate_demo_dataset():
 @app.post("/api/dataset/load-default")
 def load_default_dataset():
     """Load default dataset from datasets/raw/creditcard.csv if it exists, otherwise generate demo dataset."""
+    if os.environ.get("VERCEL"):
+        raise HTTPException(503, "Default dataset loading is local-only. Run the local FastAPI app for experiments.")
     default_path = ROOT / "datasets" / "raw" / "creditcard.csv"
     if default_path.is_file():
         return _load_csv(default_path.read_bytes(), default_path.name)
@@ -141,6 +154,8 @@ def load_default_dataset():
 
 @app.post("/api/dataset/upload")
 async def upload_dataset(file: UploadFile = File(...)):
+    if os.environ.get("VERCEL"):
+        raise HTTPException(503, "Dataset uploads are not durable on Vercel. Use the local FastAPI app for training and scoring.")
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(400, "Choose a CSV file.")
     raw = await file.read(MAX_UPLOAD + 1)
@@ -155,6 +170,8 @@ class PathRequest(BaseModel):
 
 @app.post("/api/dataset/use-path")
 def use_path(req: PathRequest):
+    if os.environ.get("VERCEL"):
+        raise HTTPException(503, "Local filesystem paths are available only with the local FastAPI app.")
     path = Path(req.path).expanduser().resolve()
     if not path.is_file() or path.suffix.lower() != ".csv":
         raise HTTPException(400, "Choose an existing local .csv file.")
@@ -181,8 +198,13 @@ class CircuitRequest(BaseModel):
 
 
 @app.get("/api/circuit")
-def circuit_get(qubits: int = 4, repeats: int = 1, entangle: bool = True):
-    return _circuit(CircuitRequest(qubits=qubits, repeats=repeats, entangle=entangle))
+def circuit_get(qubits: int = 4, repeats: int = 1, entangle: bool = True,
+                x: str | None = Query(default=None, description="Comma-separated feature-map angles from 0 to pi")):
+    try:
+        values = [float(value.strip()) for value in x.split(",")] if x else None
+    except ValueError as exc:
+        raise HTTPException(400, "Circuit angles must be comma-separated numbers.") from exc
+    return _circuit(CircuitRequest(qubits=qubits, repeats=repeats, entangle=entangle, x=values))
 
 
 def _circuit(req: CircuitRequest):
@@ -316,23 +338,199 @@ def kernel_pair(req: PairRequest):
 
 
 class JobRequest(BaseModel):
-    type: Literal["benchmark", "noise", "mitigation", "demo"]
+    type: Literal["benchmark", "noise", "mitigation", "demo", "entanglement-ablation", "scaling-ablation", "shots-sweep", "judge-demo"]
     config: dict[str, Any] = Field(default_factory=dict)
+
+
+def _decorate_run(run_id: str, group_id: str, group_type: str, grid_config: dict[str, Any] | None = None):
+    path = RESULTS / run_id / "run.json"
+    run = json.loads(path.read_text(encoding="utf-8"))
+    run["experiment_group"] = {"id": group_id, "type": group_type, "configuration": grid_config or {}}
+    path.write_text(json.dumps(run, indent=2), encoding="utf-8")
+
+
+def _run_benchmark_grid(parent_id: str, frame, dataset_name: str, dataset_hash: str,
+                        synthetic: bool, configurations: list[dict[str, Any]], group_type: str):
+    completed: list[str] = []
+    total = len(configurations)
+    jobs[parent_id]["run_ids"] = completed
+    for index, config in enumerate(configurations):
+        if jobs[parent_id].get("cancel_requested"):
+            jobs[parent_id].update(status="cancelled", message="Sweep cancelled between configurations.", run_ids=completed)
+            return
+        child_id = uuid.uuid4().hex[:12]
+        jobs[child_id] = {"job_id": child_id, "type": "benchmark", "status": "queued", "progress": 0,
+                          "message": f"Configuration {index+1}/{total}", "cancel_requested": False,
+                          "synthetic": synthetic, "parent_job_id": parent_id}
+        jobs[parent_id].update(status="running", progress=int(index / total * 100),
+                               message=f"Configuration {index+1}/{total}: k={config['fraud_labels']}, q={config['qubits']}, reps={config['repeats']}, entangle={'on' if config['entangle'] else 'off'}")
+        _run_benchmark(child_id, frame.copy(), int(config["fraud_labels"]), int(config["seed_count"]),
+                       IDEAL_SEEDS[:int(config["seed_count"])], int(config["qubits"]), int(config["repeats"]),
+                       bool(config["entangle"]), bool(config.get("log_amount", False)), synthetic,
+                       dataset_name, dataset_hash, parent_id=parent_id, grid_index=index, grid_total=total)
+        child = jobs[child_id]
+        if child.get("status") != "completed":
+            jobs[parent_id].update(status=child.get("status", "failed"), message=child.get("message", "A sweep configuration failed."), run_ids=completed)
+            return
+        run_id = child["run_id"]
+        _decorate_run(run_id, parent_id, group_type, config)
+        completed.append(run_id)
+    jobs[parent_id].update(status="completed", progress=100, run_ids=completed,
+                           message=f"{group_type.replace('-', ' ').title()} complete: {len(completed)} configurations saved.")
+
+
+def _run_noise_sweep(parent_id: str, frame, qubits: int, preset: str, seed_count: int,
+                     synthetic: bool, dataset_name: str, dataset_hash: str):
+    completed: list[str] = []
+    jobs[parent_id]["run_ids"] = completed
+    for index, shots in enumerate((256, 1024, 4096)):
+        if jobs[parent_id].get("cancel_requested"):
+            jobs[parent_id].update(status="cancelled", message="Shot sweep cancelled between shot settings.", run_ids=completed)
+            return
+        child_id = uuid.uuid4().hex[:12]
+        jobs[child_id] = {"job_id": child_id, "type": "noise", "status": "queued", "progress": 0,
+                          "message": f"Shot setting {index+1}/3", "cancel_requested": False,
+                          "synthetic": synthetic, "parent_job_id": parent_id}
+        jobs[parent_id].update(status="running", progress=int(index / 3 * 100), message=f"Running {shots} shots · seed {seed_count}.")
+        _run_noise_job(child_id, frame.copy(), qubits, preset, shots, False, seed_count, synthetic, dataset_name, dataset_hash,
+                       parent_id=parent_id, parent_start=index*100/3, parent_span=100/3)
+        child = jobs[child_id]
+        if child.get("status") != "completed":
+            jobs[parent_id].update(status=child.get("status", "failed"), message=child.get("message", "Shot sweep failed."), run_ids=completed)
+            return
+        _decorate_run(child["run_id"], parent_id, "shots-sweep", {"shots": shots, "noise_preset": preset})
+        completed.append(child["run_id"])
+    jobs[parent_id].update(status="completed", progress=100, run_ids=completed,
+                           message="Shots-vs-PR-AUC sweep complete. Review mean ± standard deviation across seeds.")
+
+
+def _run_judge_demo(parent_id: str, frame, dataset_name: str, dataset_hash: str, synthetic: bool,
+                     budget: int, preset: str):
+    run_ids: list[str] = []
+    jobs[parent_id]["run_ids"] = run_ids
+    stages = ("benchmark", "noise", "mitigation")
+    for stage_index, stage in enumerate(stages):
+        if jobs[parent_id].get("cancel_requested"):
+            jobs[parent_id].update(status="cancelled", message="Judge demo cancelled between stages.", run_ids=run_ids)
+            return
+        child_id = uuid.uuid4().hex[:12]
+        jobs[child_id] = {"job_id": child_id, "type": stage, "status": "queued", "progress": 0,
+                          "message": f"Judge demo: {stage}", "cancel_requested": False,
+                          "synthetic": synthetic, "parent_job_id": parent_id}
+        jobs[parent_id].update(status="running", progress=stage_index * 33,
+                               message=f"Judge demo stage {stage_index+1}/3: {stage.title()}.")
+        if stage == "benchmark":
+            _run_benchmark(child_id, frame.copy(), 6, 3, IDEAL_SEEDS[:3], 4, 1, True, False,
+                           synthetic, dataset_name, dataset_hash, parent_id=parent_id,
+                           grid_index=stage_index, grid_total=3)
+        else:
+            _run_noise_job(child_id, frame.copy(), 4, preset, 256, stage == "mitigation", 3,
+                           synthetic, dataset_name, dataset_hash, parent_id=parent_id,
+                           parent_start=stage_index*100/3, parent_span=100/3)
+        child = jobs[child_id]
+        if child.get("status") != "completed":
+            jobs[parent_id].update(status=child.get("status", "failed"),
+                                   message=f"Judge demo stopped during {stage}: {child.get('message', 'stage failed')}", run_ids=run_ids)
+            return
+        _decorate_run(child["run_id"], parent_id, "judge-demo", {"stage": stage, "synthetic": synthetic})
+        run_ids.append(child["run_id"])
+    jobs[parent_id].update(status="completed", progress=100, run_ids=run_ids,
+                           message="Judge demo complete: benchmark, noisy run and mitigation are saved.")
 
 
 @app.post("/api/jobs")
 def create_job(req: JobRequest):
+    if req.type == "judge-demo" and dataset["frame"] is None:
+        generate_demo_dataset()
+    if os.environ.get("VERCEL"):
+        raise HTTPException(503, "Long-running experiment jobs require the local FastAPI worker. Vercel is a presentation preview and cannot guarantee background jobs or persistent results.")
     if dataset["frame"] is None:
         raise HTTPException(409, "Load and validate a dataset before starting an experiment.")
     try:
         import numpy, pandas, sklearn
         from qiskit import QuantumCircuit
         from qiskit.quantum_info import Statevector
-        if req.type in ("noise","mitigation","demo"):
+        if req.type in ("noise","mitigation","demo","shots-sweep","judge-demo"):
             import qiskit_aer
     except ImportError:
         raise HTTPException(503, "Benchmark dependencies are missing. Install backend/requirements.txt, then restart the API.")
     frame = dataset["frame"].copy()
+    if req.type in ("entanglement-ablation", "scaling-ablation"):
+        seeds = int(req.config.get("seed_count", 3))
+        k = int(req.config.get("fraud_labels", 10))
+        entangle = bool(req.config.get("entangle", True))
+        budget = int(req.config.get("time_budget_seconds", 7200))
+        if seeds < 1 or seeds > 10 or k not in (6, 10, 20, 50):
+            raise HTTPException(400, "Choose 1–10 seeds and fraud-label count 6, 10, 20 or 50.")
+        if req.type == "entanglement-ablation":
+            qubits = int(req.config.get("qubits", 4)); repeats = int(req.config.get("repeats", 1))
+            if qubits not in (4, 6, 8) or repeats not in (1, 2, 3):
+                raise HTTPException(400, "Choose supported qubits and repeat values.")
+            configurations = [{"fraud_labels": label_count, "qubits": qubits, "repeats": repeats,
+                               "entangle": toggle, "seed_count": seeds}
+                              for label_count in (6, 10, 20, 50) for toggle in (True, False)]
+        else:
+            configurations = [{"fraud_labels": k, "qubits": n_qubits, "repeats": n_repeats,
+                               "entangle": entangle, "seed_count": seeds}
+                              for n_qubits in (4, 6, 8) for n_repeats in (1, 2, 3)]
+        max_k = max(item["fraud_labels"] for item in configurations)
+        if int((frame.Class == 1).sum()) < 100 + max_k or int((frame.Class == 0).sum()) < 600:
+            raise HTTPException(400, "The full sweep needs at least 150 fraud and 600 legitimate rows.")
+        estimate_seconds = sum(float(runtime_estimate(item["qubits"], item["repeats"], item["fraud_labels"], seeds, item["entangle"])["estimated_kernel_seconds"]) for item in configurations)
+        if budget < 60 or budget > 86400:
+            raise HTTPException(400, "Choose a time budget between 1 minute and 24 hours.")
+        if estimate_seconds > budget:
+            raise HTTPException(413, f"This {len(configurations)}-configuration sweep estimates {estimate_seconds/60:.1f} minutes for kernels alone. Increase the budget or reduce the seed count.")
+        group_id = uuid.uuid4().hex[:12]
+        group_type = "entanglement-ablation" if req.type == "entanglement-ablation" else "feature-map-scaling"
+        jobs[group_id] = {"job_id": group_id, "type": req.type, "status": "queued", "progress": 0,
+                          "message": f"Queued {len(configurations)} configurations.", "cancel_requested": False,
+                          "synthetic": bool(dataset.get("synthetic", False)), "run_ids": [],
+                          "estimated_kernel_seconds": estimate_seconds}
+        threading.Thread(target=_run_benchmark_grid, args=(group_id, frame, dataset["name"], dataset["sha256"],
+                          bool(dataset.get("synthetic", False)), configurations, group_type), daemon=True).start()
+        return {"job_id": group_id, "status": "queued", "message": f"Queued {len(configurations)} configurations; estimated kernel time {estimate_seconds/60:.1f} minutes."}
+
+    if req.type == "shots-sweep":
+        preset = str(req.config.get("noise_preset", "MEDIUM")).upper()
+        seeds = int(req.config.get("seed_count", 3)); budget = int(req.config.get("time_budget_seconds", 7200))
+        if preset not in ("LOW", "MEDIUM", "HIGH") or seeds not in (3, 5):
+            raise HTTPException(400, "Choose a noise preset and 3 or 5 independent seeds.")
+        if int((frame.Class == 1).sum()) < 30 or int((frame.Class == 0).sum()) < 30:
+            raise HTTPException(400, "The shots sweep needs at least 30 fraud and 30 legitimate rows.")
+        estimate_seconds = sum(float(noise_runtime_estimate(preset, shot, False, seeds)["estimated_seconds"]) for shot in (256, 1024, 4096))
+        if estimate_seconds > budget:
+            raise HTTPException(413, f"The three-shot sweep estimates {estimate_seconds/60:.1f} minutes. Increase the time budget or use fewer seeds.")
+        group_id = uuid.uuid4().hex[:12]
+        jobs[group_id] = {"job_id": group_id, "type": req.type, "status": "queued", "progress": 0,
+                          "message": "Queued shot settings 256, 1024 and 4096.", "cancel_requested": False,
+                          "synthetic": bool(dataset.get("synthetic", False)), "run_ids": [],
+                          "estimated_seconds": estimate_seconds}
+        threading.Thread(target=_run_noise_sweep, args=(group_id, frame, 4, preset, seeds,
+                          bool(dataset.get("synthetic", False)), dataset["name"], dataset["sha256"]), daemon=True).start()
+        return {"job_id": group_id, "status": "queued", "message": f"Queued 256/1024/4096 shot sweep, {seeds} seeds per setting."}
+
+    if req.type == "judge-demo":
+        preset = str(req.config.get("noise_preset", "LOW")).upper()
+        budget = int(req.config.get("time_budget_seconds", 7200))
+        if preset not in ("LOW", "MEDIUM", "HIGH"):
+            raise HTTPException(400, "Choose a LOW, MEDIUM or HIGH noise preset.")
+        if int((frame.Class == 1).sum()) < 106 or int((frame.Class == 0).sum()) < 600:
+            raise HTTPException(400, "The judge demo needs at least 106 fraud and 600 legitimate rows. Load a dataset or use Generate demo dataset.")
+        estimated = float(runtime_estimate(4, 1, 6, 3, True)["estimated_kernel_seconds"])
+        estimated += 2 * float(noise_runtime_estimate(preset, 256, True, 3)["estimated_seconds"])
+        if estimated > budget:
+            raise HTTPException(413, f"The complete judge demo estimates {estimated/60:.1f} minutes of kernel/simulator time. Increase the time budget.")
+        group_id = uuid.uuid4().hex[:12]
+        jobs[group_id] = {"job_id": group_id, "type": req.type, "status": "queued", "progress": 0,
+                          "message": "Queued benchmark → noisy simulation → mitigation.", "cancel_requested": False,
+                          "synthetic": bool(dataset.get("synthetic", False)), "run_ids": [],
+                          "estimated_seconds": estimated}
+        threading.Thread(target=_run_judge_demo, args=(group_id, frame, dataset["name"], dataset["sha256"],
+                          bool(dataset.get("synthetic", False)), budget, preset), daemon=True).start()
+        return {"job_id": group_id, "status": "queued", "estimated_seconds": estimated,
+                "message": f"Queued benchmark → noisy simulation → mitigation. Estimated kernel/simulator time: {estimated/60:.1f} min; setup and model fitting add time."}
+
     if req.type in ("noise","mitigation","demo"):
         qubits=int(req.config.get("qubits",4)); shots=int(req.config.get("shots",256)); preset=str(req.config.get("noise_preset","MEDIUM")).upper()
         seed_count=int(req.config.get("seed_count",3))
@@ -375,7 +573,7 @@ def create_job(req: JobRequest):
     return {"job_id": job_id, "status": "queued", "message": "Benchmark queued on this computer."}
 
 
-def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: list[int], qubits: int, repeats: int, entangle: bool, log_amount: bool, synthetic: bool, dataset_name: str, dataset_hash: str):
+def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: list[int], qubits: int, repeats: int, entangle: bool, log_amount: bool, synthetic: bool, dataset_name: str, dataset_hash: str, parent_id: str | None = None, grid_index: int = 0, grid_total: int = 1):
     """Run the ideal local benchmark. Outputs are written only after completion."""
     import numpy as np
     from qiskit import QuantumCircuit
@@ -391,11 +589,16 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
     from sklearn.svm import SVC
     from sklearn.model_selection import StratifiedKFold
     run_id = f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{job_id}"
-    rows = []; predictions = []; variances = []; circuits = {}; kernel_artifacts=[]; last_quantum_bundle = None
+    rows = []; predictions = []; variances = []; circuit_example = None; kernel_artifacts=[]; last_quantum_bundle = None
     def progress(value, message):
         with lock:
             if job_id in jobs:
                 jobs[job_id].update(status="running", progress=value, message=message)
+            if parent_id and parent_id in jobs:
+                if jobs[parent_id].get("cancel_requested"):
+                    jobs[job_id]["cancel_requested"] = True
+                jobs[parent_id].update(status="running", progress=int(100 * (grid_index + value / 100) / grid_total),
+                                       message=f"Configuration {grid_index+1}/{grid_total}: {message}")
     def feature_state(values, repeat=1, entangle=True):
         circuit = QuantumCircuit(qubits)
         for _ in range(repeat):
@@ -425,7 +628,7 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
         if log_amount: X[:,features.index("Amount")]=np.log1p(X[:,features.index("Amount")])
         positives = np.flatnonzero(y == 1); negatives = np.flatnonzero(y == 0)
         for n, seed in enumerate(seed_values):
-            if jobs[job_id].get("cancel_requested"):
+            if jobs[job_id].get("cancel_requested") or (parent_id and jobs.get(parent_id, {}).get("cancel_requested")):
                 jobs[job_id].update(status="cancelled", message="Run cancelled. No partial run was saved."); return
             rng = np.random.default_rng(seed)
             test_pos = rng.choice(positives, 100, replace=False)
@@ -443,9 +646,42 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
             ztr = pca.transform(xtr); zte = pca.transform(xte)
             angle = MinMaxScaler(feature_range=(0, math.pi), clip=True).fit(ztr)
             atr, ate = angle.transform(ztr), angle.transform(zte)
+            if n == 0:
+                circuit_example = atr[0].tolist()
             prep_s = time.perf_counter() - t0; variances.append(pca.explained_variance_ratio_.tolist())
             progress(round(5 + 85*n/seed_count), f"Seed {n+1}/{seed_count} (random state {seed}): computing ideal kernels")
-            t0 = time.perf_counter(); Ktr = matrix(atr, atr, repeats, entangle); Kte = matrix(ate, atr, repeats, entangle); kernel_s = time.perf_counter()-t0
+            cache_payload = json.dumps({"dataset": dataset_hash, "seed": int(seed),
+                "train": train_ids.tolist(), "test": test_ids.tolist(), "features": features,
+                "qubits": qubits, "repeats": repeats, "entangle": entangle,
+                "log_amount": log_amount, "preprocessing": "standard-pca-minmax-v1"}, sort_keys=True)
+            cache_key = hashlib.sha256(cache_payload.encode()).hexdigest()
+            cache_file = KERNEL_CACHE / f"{cache_key}.npz"
+            t0 = time.perf_counter()
+            if cache_file.is_file():
+                try:
+                    with np.load(cache_file, allow_pickle=False) as cached:
+                        Ktr, Kte = cached["train"], cached["test"]
+                    jobs[job_id]["cache_hits"] = jobs[job_id].get("cache_hits", 0) + 1
+                except Exception:
+                    Ktr = matrix(atr, atr, repeats, entangle); Kte = matrix(ate, atr, repeats, entangle)
+            else:
+                Ktr = matrix(atr, atr, repeats, entangle); Kte = matrix(ate, atr, repeats, entangle)
+                try:
+                    temp_cache = KERNEL_CACHE / f"{cache_key}.{uuid.uuid4().hex}.tmp.npz"
+                    np.savez_compressed(temp_cache, train=Ktr, test=Kte)
+                    temp_cache.replace(cache_file)
+                    cache_size = sum(path.stat().st_size for path in KERNEL_CACHE.glob("*.npz"))
+                    if cache_size > KERNEL_CACHE_LIMIT:
+                        cached_files = sorted(KERNEL_CACHE.glob("*.npz"), key=lambda path: path.stat().st_mtime)
+                        for old_cache in cached_files:
+                            if old_cache == cache_file: continue
+                            old_size = old_cache.stat().st_size
+                            old_cache.unlink(missing_ok=True)
+                            cache_size -= old_size
+                            if cache_size <= KERNEL_CACHE_LIMIT: break
+                except OSError:
+                    pass
+            kernel_s = time.perf_counter()-t0
             order=np.argsort(-ytr,kind="stable")
             kernel_artifacts.append(Ktr[np.ix_(order,order)])
             # Select C with stratified three-fold PR-AUC on the training kernel only.
@@ -553,25 +789,31 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
             except Exception:
                 pass
         config={"mode":"benchmark","fraud_labels":k,"seed_count":seed_count,"seeds":seed_values,"train_normal_count":200,"train_fraud_count":k,"test_fraud_count":100,"test_normal_count":400,"qubits":qubits,"repeats":repeats,"entangle":entangle,"log1p_amount":log_amount,"environment":"ideal exact statevector"}
-        run={"schema_version":"1.0","run_id":run_id,"created_at":datetime.now(timezone.utc).isoformat(),"synthetic":synthetic,"config_hash":hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest(),"dataset":{"name":dataset_name,"sha256":dataset_hash,"rows":len(frame),"fraud_count":int(y.sum()),"legitimate_count":int((y==0).sum())},"config":config,"preprocessing":{"fit_on_training_only":True,"features":features,"pca_explained_variance_mean":np.mean(variances,axis=0).tolist()},"artifacts":{"metrics":"metrics.csv","predictions":"predictions.csv","kernel_train":"kernel_train.npz","model_bundle":"model_bundle.pkl"},"kernel_heatmap":{"artifact":"kernel_train.npz","fraud_rows_first":True,"divider_after":k,"matrix_size":200+k,"seed_count":seed_count},"metrics":summary,"verdict":{"overall":verdict,"paired_difference_mean":float(differences.mean()),"interval_95_t":interval},"limitations":["Ideal software statevector simulation; no hardware execution.","This benchmark run reports ideal kernels only. Noisy and mitigated comparisons are separate run types.","Balanced test subset does not represent natural fraud prevalence.","Classical RBF-SVM and logistic regression grids are selected by training-only CV; random forest uses 200 trees.","Decision thresholds are selected from training-only out-of-fold scores; this is a research implementation that still needs independent protocol review."]}
+        run={"schema_version":"1.0","run_id":run_id,"created_at":datetime.now(timezone.utc).isoformat(),"synthetic":synthetic,"config_hash":hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest(),"dataset":{"name":dataset_name,"sha256":dataset_hash,"rows":len(frame),"fraud_count":int(y.sum()),"legitimate_count":int((y==0).sum())},"config":config,"circuit_example":{"qubits":qubits,"repeats":repeats,"entangle":entangle,"angles":circuit_example,"seed":seed_values[0]},"preprocessing":{"fit_on_training_only":True,"features":features,"pca_explained_variance_mean":np.mean(variances,axis=0).tolist()},"kernel_cache":{"enabled":True,"hits":int(jobs[job_id].get("cache_hits",0)),"limit_bytes":KERNEL_CACHE_LIMIT},"artifacts":{"metrics":"metrics.csv","predictions":"predictions.csv","kernel_train":"kernel_train.npz","model_bundle":"model_bundle.pkl"},"kernel_heatmap":{"artifact":"kernel_train.npz","fraud_rows_first":True,"divider_after":k,"matrix_size":200+k,"seed_count":seed_count},"metrics":summary,"verdict":{"overall":verdict,"paired_difference_mean":float(differences.mean()),"interval_95_t":interval},"limitations":["Ideal software statevector simulation; no hardware execution.","This benchmark run reports ideal kernels only. Noisy and mitigated comparisons are separate run types.","Balanced test subset does not represent natural fraud prevalence.","Classical RBF-SVM and logistic regression grids are selected by training-only CV; random forest uses 200 trees.","Decision thresholds are selected from training-only out-of-fold scores; this is a research implementation that still needs independent protocol review."]}
         (out/"run.json").write_text(json.dumps(run,indent=2),encoding="utf-8")
-        jobs[job_id].update(status="completed",progress=100,message="Ideal benchmark completed.",run_id=run_id)
+        jobs[job_id].update(status="completed",progress=100,message=f"Ideal benchmark completed. Kernel cache hits: {jobs[job_id].get('cache_hits',0)}.",run_id=run_id)
     except Exception as exc:
         jobs[job_id].update(status="failed",message="The run stopped before a complete result was saved. Check the dataset size and local simulation dependencies, then retry.")
 
 
-def _run_noise_job(job_id, frame, qubits, preset, shots, mitigate, seed_count, synthetic, dataset_name, dataset_hash):
+def _run_noise_job(job_id, frame, qubits, preset, shots, mitigate, seed_count, synthetic, dataset_name, dataset_hash,
+                   parent_id: str | None = None, parent_start: float = 0, parent_span: float = 100):
     run_id=f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{job_id}"
     try:
         import numpy as np
         from .noise_lab import run_lab
         results=[]
         for seed in range(seed_count):
-            if jobs[job_id].get("cancel_requested"): raise InterruptedError()
+            if jobs[job_id].get("cancel_requested") or (parent_id and jobs.get(parent_id, {}).get("cancel_requested")):
+                raise InterruptedError()
             start=seed/seed_count
             def progress(value,message):
                 if jobs[job_id].get("cancel_requested"): raise InterruptedError()
-                jobs[job_id].update(status="running",progress=int(5+85*(start+value/(100*seed_count))),message=f"Seed {seed+1}/{seed_count}: {message}")
+                child_progress = int(5+85*(start+value/(100*seed_count)))
+                jobs[job_id].update(status="running",progress=child_progress,message=f"Seed {seed+1}/{seed_count}: {message}")
+                if parent_id and parent_id in jobs:
+                    jobs[parent_id].update(status="running", progress=int(parent_start + parent_span * child_progress / 100),
+                                           message=f"{shots} shots · seed {seed+1}/{seed_count}: {message}")
             results.append(run_lab(frame,qubits,preset,shots,seed=seed,mitigate=mitigate,synthetic=synthetic,progress=progress))
         progress(94,"Writing the completed multi-seed simulation result.")
         first=results[0]
@@ -651,7 +893,7 @@ def list_results():
         try:
             run=json.loads(file.read_text(encoding="utf-8"))
             # Keep the index small; full kernel matrices are returned only by get_result.
-            item={k:run.get(k) for k in ("schema_version","run_id","created_at","synthetic","label","config_hash","dataset","config","preprocessing","artifacts","metrics","verdict","limitations","protocol","balanced_subset_notice") if k in run}
+            item={k:run.get(k) for k in ("schema_version","run_id","created_at","synthetic","label","config_hash","dataset","config","preprocessing","artifacts","metrics","verdict","limitations","protocol","balanced_subset_notice","experiment_group","kernel_cache","circuit_example") if k in run}
             lab=run.get("noise_lab",{})
             if lab:
                 mit_data = lab.get("mitigation") or {}
@@ -956,13 +1198,17 @@ class ScoreRequest(BaseModel):
 
 @app.post("/api/score")
 def score(req: ScoreRequest):
+    if os.environ.get("VERCEL"):
+        raise HTTPException(503, "Persisted model scoring requires the local FastAPI app; serverless instances do not retain dataset and model state.")
     import numpy as np
     from qiskit import QuantumCircuit
     from qiskit.quantum_info import Statevector
 
+    request_start = time.perf_counter()
     bundle, active_run_id = _get_or_create_model_bundle(req.run_id)
-    t0 = time.perf_counter()
-
+    model_init_ms = (time.perf_counter() - request_start) * 1000.0
+    inference_start = time.perf_counter()
+    preprocess_start = time.perf_counter()
     features = bundle["features"]
     raw_vals = [float(req.values.get(f, 0.0)) for f in features]
     raw_array = np.array([raw_vals], dtype=float)
@@ -973,7 +1219,9 @@ def score(req: ScoreRequest):
     x_scaled = bundle["scaler"].transform(raw_array)
     z = bundle["pca"].transform(x_scaled)
     a = bundle["angle"].transform(z)
+    preprocessing_ms = (time.perf_counter() - preprocess_start) * 1000.0
 
+    quantum_state_start = time.perf_counter()
     qubits = bundle["qubits"]
     repeats = bundle["repeats"]
     entangle = bundle["entangle"]
@@ -992,10 +1240,15 @@ def score(req: ScoreRequest):
 
     new_state = feature_state(a[0])
     train_states = np.stack([feature_state(x) for x in bundle["quantum_train_angles"]])
+    quantum_state_ms = (time.perf_counter() - quantum_state_start) * 1000.0
+    kernel_start = time.perf_counter()
     k_vec = np.abs(train_states @ new_state.conj().T) ** 2
+    kernel_eval_ms = (time.perf_counter() - kernel_start) * 1000.0
 
     q_model = bundle["quantum_model"]
+    q_svc_start = time.perf_counter()
     q_score = float(q_model.decision_function([k_vec])[0])
+    quantum_svc_ms = (time.perf_counter() - q_svc_start) * 1000.0
     q_thresh = float(bundle["q_threshold"])
     q_pred = int(q_score >= q_thresh)
     # Exact additive SVC decomposition: sum(alpha_i * y_i * K(x_i, x)) + intercept.
@@ -1016,16 +1269,22 @@ def score(req: ScoreRequest):
     reference = np.asarray(bundle.get("quantum_reference_scores", []), dtype=float)
     rank_percentile = float(np.mean(reference <= q_score) * 100.0) if reference.size else None
 
+    classical_preprocess_start = time.perf_counter()
     clf = bundle["best_classical_model"]
     c_thresh = float(bundle["classical_threshold"])
     c_in = raw_array if bundle.get("best_classical_name") == "Classical (all features)" else z
+    classical_preprocessing_ms = (time.perf_counter() - classical_preprocess_start) * 1000.0
+    classical_predict_start = time.perf_counter()
     if hasattr(clf, "decision_function"):
         c_score = float(clf.decision_function(c_in)[0])
     else:
         c_score = float(clf.predict_proba(c_in)[0, 1])
     c_pred = int(c_score >= c_thresh)
+    classical_prediction_ms = (time.perf_counter() - classical_predict_start) * 1000.0
+    classical_ms = classical_preprocessing_ms + classical_prediction_ms
 
-    latency_ms = (time.perf_counter() - t0) * 1000.0
+    inference_ms = (time.perf_counter() - inference_start) * 1000.0
+    latency_ms = (time.perf_counter() - request_start) * 1000.0
     q_dict = {
         "score": round(q_score, 5),
         "threshold": round(q_thresh, 5),
@@ -1055,8 +1314,17 @@ def score(req: ScoreRequest):
     }
     latency_breakdown = {
         "total_ms": round(latency_ms, 2),
-        "quantum_kernel_ms": round(max(1.0, latency_ms - 4.0), 2),
-        "classical_ms": round(max(0.5, min(4.0, latency_ms * 0.05)), 2)
+        "model_initialization_ms": round(model_init_ms, 2),
+        "inference_ms": round(inference_ms, 2),
+        "preprocessing_ms": round(preprocessing_ms, 2),
+        "quantum_state_generation_ms": round(quantum_state_ms, 2),
+        "kernel_evaluation_ms": round(kernel_eval_ms, 2),
+        "quantum_svc_ms": round(quantum_svc_ms, 2),
+        "quantum_kernel_ms": round(quantum_state_ms + kernel_eval_ms, 2),
+        "classical_input_selection_ms": round(classical_preprocessing_ms, 2),
+        "classical_prediction_ms": round(classical_prediction_ms, 2),
+        "classical_ms": round(classical_ms, 2),
+        "timing_method": "independently measured wall-clock stages; end-to-end includes model load or fit"
     }
     return {
         "status": "ok",
