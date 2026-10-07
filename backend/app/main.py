@@ -31,6 +31,41 @@ KERNEL_CACHE_LIMIT = 512 * 1024 * 1024
 os.environ.setdefault("MPLCONFIGDIR", str(_writable / ".mplconfig"))
 Path(os.environ["MPLCONFIGDIR"]).mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD = 250 * 1024 * 1024
+
+
+def _kernel_cache_get_or_compute(cache_key: str, compute):
+    """Load a cached pair of kernel matrices, or compute and persist the pair."""
+    cache_file = KERNEL_CACHE / f"{cache_key}.npz"
+    import numpy as np
+
+    if cache_file.is_file():
+        try:
+            with np.load(cache_file, allow_pickle=False) as cached:
+                return cached["train"], cached["test"], True
+        except Exception:
+            # A truncated or incompatible cache entry should not block a run.
+            cache_file.unlink(missing_ok=True)
+
+    train, test = compute()
+    try:
+        temp_cache = KERNEL_CACHE / f"{cache_key}.{uuid.uuid4().hex}.tmp.npz"
+        np.savez_compressed(temp_cache, train=train, test=test)
+        temp_cache.replace(cache_file)
+        cache_size = sum(path.stat().st_size for path in KERNEL_CACHE.glob("*.npz"))
+        if cache_size > KERNEL_CACHE_LIMIT:
+            cached_files = sorted(KERNEL_CACHE.glob("*.npz"), key=lambda path: path.stat().st_mtime)
+            for old_cache in cached_files:
+                if old_cache == cache_file:
+                    continue
+                old_size = old_cache.stat().st_size
+                old_cache.unlink(missing_ok=True)
+                cache_size -= old_size
+                if cache_size <= KERNEL_CACHE_LIMIT:
+                    break
+    except OSError:
+        # The cache is an optimization; a read-only or full disk must not fail a run.
+        pass
+    return train, test, False
 REQUIRED = {*(f"V{i}" for i in range(1, 29)), "Time", "Amount", "Class"}
 IDEAL_SEEDS = [42, 123, 456, 789, 1000, 2024, 2025, 2026, 31415, 27182]
 dataset: dict[str, Any] = {"frame": None, "name": None, "sha256": None, "synthetic": False}
@@ -655,32 +690,11 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
                 "qubits": qubits, "repeats": repeats, "entangle": entangle,
                 "log_amount": log_amount, "preprocessing": "standard-pca-minmax-v1"}, sort_keys=True)
             cache_key = hashlib.sha256(cache_payload.encode()).hexdigest()
-            cache_file = KERNEL_CACHE / f"{cache_key}.npz"
             t0 = time.perf_counter()
-            if cache_file.is_file():
-                try:
-                    with np.load(cache_file, allow_pickle=False) as cached:
-                        Ktr, Kte = cached["train"], cached["test"]
-                    jobs[job_id]["cache_hits"] = jobs[job_id].get("cache_hits", 0) + 1
-                except Exception:
-                    Ktr = matrix(atr, atr, repeats, entangle); Kte = matrix(ate, atr, repeats, entangle)
-            else:
-                Ktr = matrix(atr, atr, repeats, entangle); Kte = matrix(ate, atr, repeats, entangle)
-                try:
-                    temp_cache = KERNEL_CACHE / f"{cache_key}.{uuid.uuid4().hex}.tmp.npz"
-                    np.savez_compressed(temp_cache, train=Ktr, test=Kte)
-                    temp_cache.replace(cache_file)
-                    cache_size = sum(path.stat().st_size for path in KERNEL_CACHE.glob("*.npz"))
-                    if cache_size > KERNEL_CACHE_LIMIT:
-                        cached_files = sorted(KERNEL_CACHE.glob("*.npz"), key=lambda path: path.stat().st_mtime)
-                        for old_cache in cached_files:
-                            if old_cache == cache_file: continue
-                            old_size = old_cache.stat().st_size
-                            old_cache.unlink(missing_ok=True)
-                            cache_size -= old_size
-                            if cache_size <= KERNEL_CACHE_LIMIT: break
-                except OSError:
-                    pass
+            Ktr, Kte, cache_hit = _kernel_cache_get_or_compute(
+                cache_key, lambda: (matrix(atr, atr, repeats, entangle), matrix(ate, atr, repeats, entangle)))
+            if cache_hit:
+                jobs[job_id]["cache_hits"] = jobs[job_id].get("cache_hits", 0) + 1
             kernel_s = time.perf_counter()-t0
             order=np.argsort(-ytr,kind="stable")
             kernel_artifacts.append(Ktr[np.ix_(order,order)])
