@@ -1,18 +1,39 @@
 # Q-Fraud Intelligence
 
-A local research prototype for comparing classical fraud classifiers with a
+A research prototype for comparing classical fraud classifiers with a
 Qiskit quantum-kernel SVM and simulated noise. The software uses Qiskit and
-Qiskit Aer on this computer. It does not connect to quantum hardware, IBM
-Quantum, credentials, or cloud services. No dataset or benchmark results ship
-with the project.
+Qiskit Aer in a Python worker. It does not connect to quantum hardware, IBM
+Quantum, or quantum cloud services. No dataset ships with the project.
+
+## Deploy the hosted app
+
+The frontend is a Vercel static site and the API is a persistent Render web
+service. The Render service definition in `render.yaml` installs the Python
+dependencies, starts Uvicorn, mounts a persistent disk for experiment results
+and uploaded datasets, and allows requests from `https://qkernel.vercel.app`.
+The configured worker uses 2 CPU cores, 4 GB memory, and a 5 GB persistent
+disk; Render requires a paid service for persistent disks.
+
+1. Push this repository to GitHub and create a Render Blueprint from it. Render
+   reads `render.yaml`; wait for the `qkernel-api` deployment to become live.
+2. Open `https://qkernel-api.onrender.com/api/health`. A healthy response has
+   `status: "ok"` and `execution_mode: "persistent-worker"`.
+3. In the Vercel project settings, set the production environment variable
+   `VITE_API_URL` to `https://qkernel-api.onrender.com` (no trailing slash),
+   then redeploy the frontend. Vite embeds this value during the build.
+4. Open `https://qkernel.vercel.app`, confirm it reports a connected persistent
+   worker, then upload your CSV and run the experiments.
+
+If Render assigns a different service URL, use that URL in Vercel. The Render
+Blueprint's `CORS_ALLOW_ORIGINS` must include the exact frontend origin. The
+API's `QKERNEL_DATA_DIR` points to the mounted disk; result files and uploaded
+CSV data survive service restarts. Running benchmark jobs stop when a worker
+restarts or redeploys, so restart any interrupted jobs.
 
 ## Start the application
 
-The full research workflow requires the local FastAPI worker. Vercel is a
-presentation preview only: its API is serverless, cannot read local file paths,
-and does not guarantee in-memory datasets, background jobs, or saved results
-between requests. The UI and API both disclose this mode and reject workflows
-that depend on persistent local state.
+The full research workflow requires a persistent FastAPI worker. For local
+development, run the API and frontend as separate processes:
 
 Requirements: Python 3.11 or newer and Node.js 20 or newer.
 
@@ -125,9 +146,8 @@ long; the estimator covers kernel/simulator work and is not a completion-time
 guarantee. Noise sweeps use balanced demo subsets, not the full ideal benchmark
 protocol. Thermal-relaxation noise is not modeled. Live decision scores are not
 calibrated probabilities; the threshold sandbox is exploratory and does not
-retrain the model or establish a production operating point. Vercel remains a
-presentation preview; use the local API for reproducible experiments and
-persistent results.
+retrain the model or establish a production operating point. Use the persistent
+API worker for reproducible experiments; Vercel hosts the static frontend.
 
 Treat every result as prototype research output. Simulation time is not
 quantum-hardware performance. Accuracy can mislead when fraud is rare. A
@@ -150,7 +170,6 @@ moss `#557565`, and gold `#B38A3E`; DM Sans for reading and DM Mono for
 measurements. It supports system dark mode, reduced motion, and responsive
 layouts.
 
-The Vercel preview sets `execution_mode=vercel-serverless`; `/api/jobs`,
-dataset-session endpoints, and persisted-model scoring return HTTP 503 there.
-This is deliberate so a transient function does not present an in-memory job as
-a durable experiment. The full experiment worker is the local Uvicorn process.
+If `VITE_API_URL` is not set in Vercel, the frontend uses same-origin `/api`
+requests and the app will not reach the Render worker. Set the variable and
+redeploy after creating the backend.

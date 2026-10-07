@@ -1,4 +1,4 @@
-"""Local-only API shell. Heavy scientific dependencies are loaded on demand."""
+"""Persistent API worker. Heavy scientific dependencies are loaded on demand."""
 from __future__ import annotations
 
 import csv
@@ -20,11 +20,16 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parents[2]
-# On Vercel (and other read-only filesystems) only /tmp is writable.
-# Fall back to /tmp/qkernel so the app starts without crashing.
-_writable = Path("/tmp/qkernel") if os.environ.get("VERCEL") or not os.access(ROOT, os.W_OK) else ROOT
+# Use the mounted persistent volume on hosted workers, /tmp on serverless, and
+# the project directory for local development.
+SERVERLESS = bool(os.environ.get("VERCEL"))
+_data_dir = os.environ.get("QKERNEL_DATA_DIR")
+_writable = (Path(_data_dir).expanduser() if _data_dir else
+             Path("/tmp/qkernel") if SERVERLESS or not os.access(ROOT, os.W_OK) else ROOT)
 RESULTS = _writable / "results"
 RESULTS.mkdir(parents=True, exist_ok=True)
+DATA_DIR = _writable / "datasets"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 KERNEL_CACHE = RESULTS / "kernel-cache"
 KERNEL_CACHE.mkdir(parents=True, exist_ok=True)
 KERNEL_CACHE_LIMIT = 512 * 1024 * 1024
@@ -74,8 +79,12 @@ lock = threading.Lock()
 
 app = FastAPI(title="Q-Fraud Intelligence API", version="0.1.0",
               description="Local software simulation research API. No quantum hardware or cloud services.")
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+_allowed_origins = [origin.strip() for origin in os.environ.get(
+    "CORS_ALLOW_ORIGINS", "http://127.0.0.1:5173,http://localhost:5173"
+).split(",") if origin.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_allowed_origins,
+                   allow_credentials=False, allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+                   allow_headers=["Content-Type"])
 
 
 def _pd():
@@ -111,7 +120,34 @@ def _load_csv(raw: bytes, name: str):
     if not values.issubset({0, 1, 0.0, 1.0}):
         raise HTTPException(400, "Column 'Class' must contain only 0 and 1.")
     dataset.update(frame=frame, name=name, sha256=hashlib.sha256(raw).hexdigest(), synthetic=False)
+    if _data_dir:
+        # Keep the most recently uploaded dataset on the mounted volume so a
+        # normal service restart does not require the user to upload it again.
+        saved_csv = DATA_DIR / "uploaded.csv"
+        saved_meta = DATA_DIR / "uploaded.json"
+        temp_csv = DATA_DIR / f"uploaded.{uuid.uuid4().hex}.tmp"
+        try:
+            temp_csv.write_bytes(raw)
+            temp_csv.replace(saved_csv)
+            saved_meta.write_text(json.dumps({"name": name}), encoding="utf-8")
+        except OSError as exc:
+            temp_csv.unlink(missing_ok=True)
+            raise HTTPException(507, "Dataset validated, but the persistent data disk could not save it. Check available disk space.") from exc
     return _statistics(frame)
+
+
+@app.on_event("startup")
+def restore_uploaded_dataset():
+    saved_csv = DATA_DIR / "uploaded.csv"
+    saved_meta = DATA_DIR / "uploaded.json"
+    if _data_dir and saved_csv.is_file():
+        try:
+            metadata = json.loads(saved_meta.read_text(encoding="utf-8")) if saved_meta.is_file() else {}
+            _load_csv(saved_csv.read_bytes(), str(metadata.get("name") or "uploaded.csv"))
+        except Exception as exc:
+            # A corrupt saved file should not prevent the API health endpoint
+            # from starting; the user can upload a corrected CSV.
+            print(f"Could not restore persisted dataset: {exc}")
 
 
 def _statistics(frame):
@@ -127,12 +163,14 @@ def _statistics(frame):
 @app.get("/api/health")
 def health():
     default_csv = (ROOT / "datasets" / "raw" / "creditcard.csv").is_file()
-    serverless = bool(os.environ.get("VERCEL"))
+    serverless = SERVERLESS
+    persistent_volume = bool(_data_dir)
+    remote_worker = os.environ.get("QKERNEL_DEPLOYMENT") == "render"
     return {"status": "ok", "mode": "local software simulation",
-            "execution_mode": "vercel-serverless" if serverless else "local-worker",
+            "execution_mode": "vercel-serverless" if serverless else "persistent-worker" if remote_worker else "local-worker",
             "persistent_background_jobs": not serverless,
-            "persistent_results": not serverless,
-            "supports_local_paths": not serverless,
+            "persistent_results": persistent_volume or (not serverless and not remote_worker),
+            "supports_local_paths": not serverless and not remote_worker,
             "dataset_loaded": dataset["frame"] is not None,
             "dataset_name": dataset.get("name"), "default_dataset_available": default_csv,
             "results_count": len(list(RESULTS.glob("*/run.json")))}
@@ -142,7 +180,7 @@ def health():
 def generate_demo_dataset():
     """Generate a realistic synthetic credit-card dataset for immediate research testing."""
     if os.environ.get("VERCEL"):
-        raise HTTPException(503, "Dataset sessions are temporary on Vercel. Run the local FastAPI app for experiments.")
+        raise HTTPException(503, "Dataset sessions are temporary on Vercel. Connect a persistent FastAPI worker for experiments.")
     pd = _pd()
     import numpy as np
     rng = np.random.default_rng(42)
@@ -180,7 +218,7 @@ def generate_demo_dataset():
 def load_default_dataset():
     """Load default dataset from datasets/raw/creditcard.csv if it exists, otherwise generate demo dataset."""
     if os.environ.get("VERCEL"):
-        raise HTTPException(503, "Default dataset loading is local-only. Run the local FastAPI app for experiments.")
+        raise HTTPException(503, "Default dataset loading is unavailable on Vercel. Connect a persistent FastAPI worker.")
     default_path = ROOT / "datasets" / "raw" / "creditcard.csv"
     if default_path.is_file():
         return _load_csv(default_path.read_bytes(), default_path.name)
@@ -190,7 +228,7 @@ def load_default_dataset():
 @app.post("/api/dataset/upload")
 async def upload_dataset(file: UploadFile = File(...)):
     if os.environ.get("VERCEL"):
-        raise HTTPException(503, "Dataset uploads are not durable on Vercel. Use the local FastAPI app for training and scoring.")
+        raise HTTPException(503, "Dataset uploads are not durable on Vercel. Connect a persistent FastAPI worker for training and scoring.")
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(400, "Choose a CSV file.")
     raw = await file.read(MAX_UPLOAD + 1)
@@ -206,7 +244,7 @@ class PathRequest(BaseModel):
 @app.post("/api/dataset/use-path")
 def use_path(req: PathRequest):
     if os.environ.get("VERCEL"):
-        raise HTTPException(503, "Local filesystem paths are available only with the local FastAPI app.")
+        raise HTTPException(503, "Local filesystem paths are available only in local development.")
     path = Path(req.path).expanduser().resolve()
     if not path.is_file() or path.suffix.lower() != ".csv":
         raise HTTPException(400, "Choose an existing local .csv file.")
@@ -501,7 +539,7 @@ def create_job(req: JobRequest):
     if req.type == "judge-demo" and dataset["frame"] is None:
         generate_demo_dataset()
     if os.environ.get("VERCEL"):
-        raise HTTPException(503, "Long-running experiment jobs require the local FastAPI worker. Vercel is a presentation preview and cannot guarantee background jobs or persistent results.")
+        raise HTTPException(503, "Long-running experiments require a persistent FastAPI worker. Vercel serverless functions cannot guarantee background jobs or persistent results.")
     if dataset["frame"] is None:
         raise HTTPException(409, "Load and validate a dataset before starting an experiment.")
     try:
@@ -1260,7 +1298,7 @@ class ScoreRequest(BaseModel):
 @app.post("/api/score")
 def score(req: ScoreRequest):
     if os.environ.get("VERCEL"):
-        raise HTTPException(503, "Persisted model scoring requires the local FastAPI app; serverless instances do not retain dataset and model state.")
+        raise HTTPException(503, "Persisted model scoring requires a persistent FastAPI worker; Vercel serverless instances do not retain dataset and model state.")
     import numpy as np
     from qiskit import QuantumCircuit
     from qiskit.quantum_info import Statevector

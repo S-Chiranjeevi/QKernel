@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: qkernel-api
+    runtime: python
+    plan: 2c-4g
+    region: singapore
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: python -m uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    disk:
+      name: qkernel-data
+      mountPath: /var/data
+      sizeGB: 5
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: QKERNEL_DEPLOYMENT
+        value: render
+      - key: QKERNEL_DATA_DIR
+        value: /var/data/qkernel
+      - key: CORS_ALLOW_ORIGINS
+        value: https://qkernel.vercel.app,http://127.0.0.1:5173,http://localhost:5173
