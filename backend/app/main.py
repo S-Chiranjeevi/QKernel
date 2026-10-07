@@ -314,6 +314,29 @@ def runtime_estimate(qubits: int = 4, repeats: int = 1, fraud_labels: int = 10, 
             "message":"Estimate calibrates the worker's state generation and vectorized matrix products. It covers kernel construction only; CV, model fitting, storage and machine load add time, and small-matrix timing is an extrapolation."}
 
 
+@app.get("/api/runtime-estimate/grid")
+def runtime_grid_estimate(type: Literal["scarcity-curve", "entanglement-ablation", "scaling-ablation"],
+                         qubits: int = 6, fraud_labels: int = 10, repeats: int = 1,
+                         seeds: int = 3, entangle: bool = True):
+    """Estimate every kernel configuration before launching a multi-run sweep."""
+    if qubits not in (4, 6, 8) or repeats not in (1, 2, 3) or fraud_labels not in (6, 10, 20, 50) or not 1 <= seeds <= 10:
+        raise HTTPException(400, "Choose supported qubit, repeat, fraud-label and seed values.")
+    if type == "entanglement-ablation":
+        configs = [(k, qubits, repeats, toggle) for k in (6, 10, 20, 50) for toggle in (True, False)]
+    elif type == "scaling-ablation":
+        configs = [(fraud_labels, q, r, entangle) for q in (4, 6, 8) for r in (1, 2, 3)]
+    else:
+        configs = [(k, qubits, repeats, entangle) for k in (6, 10, 20, 50)]
+    estimates = [runtime_estimate(q, r, k, seeds, toggle) for k, q, r, toggle in configs]
+    return {"type": type, "configuration_count": len(configs), "seed_count": seeds,
+            "estimated_kernel_entries": sum(item["estimated_kernel_entries"] for item in estimates),
+            "estimated_kernel_seconds": sum(item["estimated_kernel_seconds"] for item in estimates),
+            "per_configuration": [{"fraud_labels": k, "qubits": q, "repeats": r, "entangle": toggle,
+                                   "estimated_kernel_seconds": result["estimated_kernel_seconds"]}
+                                  for (k, q, r, toggle), result in zip(configs, estimates)],
+            "message": "Kernel-construction estimate only; model fitting, CV, storage, and machine load add time."}
+
+
 @app.get("/api/runtime-estimate/noise")
 def noise_runtime_estimate(preset: Literal["LOW","MEDIUM","HIGH"]="MEDIUM", shots: int=256, mitigation: bool=False, seeds: int=1):
     if shots not in (256,1024,4096): raise HTTPException(400,"Choose 256, 1024 or 4096 shots.")
@@ -373,7 +396,7 @@ def kernel_pair(req: PairRequest):
 
 
 class JobRequest(BaseModel):
-    type: Literal["benchmark", "noise", "mitigation", "demo", "entanglement-ablation", "scaling-ablation", "shots-sweep", "judge-demo"]
+    type: Literal["benchmark", "noise", "mitigation", "demo", "entanglement-ablation", "scaling-ablation", "shots-sweep", "judge-demo", "scarcity-curve"]
     config: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -490,7 +513,7 @@ def create_job(req: JobRequest):
     except ImportError:
         raise HTTPException(503, "Benchmark dependencies are missing. Install backend/requirements.txt, then restart the API.")
     frame = dataset["frame"].copy()
-    if req.type in ("entanglement-ablation", "scaling-ablation"):
+    if req.type in ("entanglement-ablation", "scaling-ablation", "scarcity-curve"):
         seeds = int(req.config.get("seed_count", 3))
         k = int(req.config.get("fraud_labels", 10))
         entangle = bool(req.config.get("entangle", True))
@@ -504,10 +527,17 @@ def create_job(req: JobRequest):
             configurations = [{"fraud_labels": label_count, "qubits": qubits, "repeats": repeats,
                                "entangle": toggle, "seed_count": seeds}
                               for label_count in (6, 10, 20, 50) for toggle in (True, False)]
-        else:
+        elif req.type == "scaling-ablation":
             configurations = [{"fraud_labels": k, "qubits": n_qubits, "repeats": n_repeats,
                                "entangle": entangle, "seed_count": seeds}
                               for n_qubits in (4, 6, 8) for n_repeats in (1, 2, 3)]
+        else:
+            curve_qubits = int(req.config.get("qubits", 6)); curve_repeats = int(req.config.get("repeats", 1))
+            if curve_qubits not in (4, 6, 8) or curve_repeats not in (1, 2, 3):
+                raise HTTPException(400, "Choose 4, 6 or 8 qubits and 1, 2 or 3 repeats.")
+            configurations = [{"fraud_labels": label_count, "qubits": curve_qubits,
+                               "repeats": curve_repeats, "entangle": entangle,
+                               "seed_count": seeds} for label_count in (6, 10, 20, 50)]
         max_k = max(item["fraud_labels"] for item in configurations)
         if int((frame.Class == 1).sum()) < 100 + max_k or int((frame.Class == 0).sum()) < 600:
             raise HTTPException(400, "The full sweep needs at least 150 fraud and 600 legitimate rows.")
@@ -517,7 +547,8 @@ def create_job(req: JobRequest):
         if estimate_seconds > budget:
             raise HTTPException(413, f"This {len(configurations)}-configuration sweep estimates {estimate_seconds/60:.1f} minutes for kernels alone. Increase the budget or reduce the seed count.")
         group_id = uuid.uuid4().hex[:12]
-        group_type = "entanglement-ablation" if req.type == "entanglement-ablation" else "feature-map-scaling"
+        group_type = {"entanglement-ablation":"entanglement-ablation", "scaling-ablation":"feature-map-scaling",
+                      "scarcity-curve":"scarcity-curve"}[req.type]
         jobs[group_id] = {"job_id": group_id, "type": req.type, "status": "queued", "progress": 0,
                           "message": f"Queued {len(configurations)} configurations.", "cancel_requested": False,
                           "synthetic": bool(dataset.get("synthetic", False)), "run_ids": [],
@@ -780,6 +811,11 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
             vals=[r["value"] for r in rows if r["seed"]==seed and r["metric"]=="PR-AUC" and r["model"]=="Best classical (CV-selected)"]
             classical_by_seed.append(max(vals) if vals else 0)
         differences=quantum-np.array(classical_by_seed)
+        seed_summaries=[]
+        for seed, difference, quantum_value, classical_value in zip(seed_values, differences, quantum, classical_by_seed):
+            seed_summaries.append({"seed":int(seed),"quantum_pr_auc":float(quantum_value),
+                                   "best_classical_pr_auc":float(classical_value),
+                                   "paired_difference":float(difference)})
         verdict="Not enough evidence"; interval=[None,None]
         if seed_count>=2:
             from scipy.stats import t
@@ -803,7 +839,7 @@ def _run_benchmark(job_id: str, frame, k: int, seed_count: int, seed_values: lis
             except Exception:
                 pass
         config={"mode":"benchmark","fraud_labels":k,"seed_count":seed_count,"seeds":seed_values,"train_normal_count":200,"train_fraud_count":k,"test_fraud_count":100,"test_normal_count":400,"qubits":qubits,"repeats":repeats,"entangle":entangle,"log1p_amount":log_amount,"environment":"ideal exact statevector"}
-        run={"schema_version":"1.0","run_id":run_id,"created_at":datetime.now(timezone.utc).isoformat(),"synthetic":synthetic,"config_hash":hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest(),"dataset":{"name":dataset_name,"sha256":dataset_hash,"rows":len(frame),"fraud_count":int(y.sum()),"legitimate_count":int((y==0).sum())},"config":config,"circuit_example":{"qubits":qubits,"repeats":repeats,"entangle":entangle,"angles":circuit_example,"seed":seed_values[0]},"preprocessing":{"fit_on_training_only":True,"features":features,"pca_explained_variance_mean":np.mean(variances,axis=0).tolist()},"kernel_cache":{"enabled":True,"hits":int(jobs[job_id].get("cache_hits",0)),"limit_bytes":KERNEL_CACHE_LIMIT},"artifacts":{"metrics":"metrics.csv","predictions":"predictions.csv","kernel_train":"kernel_train.npz","model_bundle":"model_bundle.pkl"},"kernel_heatmap":{"artifact":"kernel_train.npz","fraud_rows_first":True,"divider_after":k,"matrix_size":200+k,"seed_count":seed_count},"metrics":summary,"verdict":{"overall":verdict,"paired_difference_mean":float(differences.mean()),"interval_95_t":interval},"limitations":["Ideal software statevector simulation; no hardware execution.","This benchmark run reports ideal kernels only. Noisy and mitigated comparisons are separate run types.","Balanced test subset does not represent natural fraud prevalence.","Classical RBF-SVM and logistic regression grids are selected by training-only CV; random forest uses 200 trees.","Decision thresholds are selected from training-only out-of-fold scores; this is a research implementation that still needs independent protocol review."]}
+        run={"schema_version":"1.0","run_id":run_id,"created_at":datetime.now(timezone.utc).isoformat(),"synthetic":synthetic,"config_hash":hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest(),"dataset":{"name":dataset_name,"sha256":dataset_hash,"rows":len(frame),"fraud_count":int(y.sum()),"legitimate_count":int((y==0).sum())},"config":config,"circuit_example":{"qubits":qubits,"repeats":repeats,"entangle":entangle,"angles":circuit_example,"seed":seed_values[0]},"preprocessing":{"fit_on_training_only":True,"features":features,"pca_explained_variance_mean":np.mean(variances,axis=0).tolist()},"kernel_cache":{"enabled":True,"hits":int(jobs[job_id].get("cache_hits",0)),"limit_bytes":KERNEL_CACHE_LIMIT},"artifacts":{"metrics":"metrics.csv","predictions":"predictions.csv","kernel_train":"kernel_train.npz","model_bundle":"model_bundle.pkl"},"kernel_heatmap":{"artifact":"kernel_train.npz","fraud_rows_first":True,"divider_after":k,"matrix_size":200+k,"seed_count":seed_count},"seed_summaries":seed_summaries,"metrics":summary,"verdict":{"overall":verdict,"paired_difference_mean":float(differences.mean()),"interval_95_t":interval},"limitations":["Ideal software statevector simulation; no hardware execution.","This benchmark run reports ideal kernels only. Noisy and mitigated comparisons are separate run types.","Balanced test subset does not represent natural fraud prevalence.","Classical RBF-SVM and logistic regression grids are selected by training-only CV; random forest uses 200 trees.","Decision thresholds are selected from training-only out-of-fold scores; this is a research implementation that still needs independent protocol review."]}
         (out/"run.json").write_text(json.dumps(run,indent=2),encoding="utf-8")
         jobs[job_id].update(status="completed",progress=100,message=f"Ideal benchmark completed. Kernel cache hits: {jobs[job_id].get('cache_hits',0)}.",run_id=run_id)
     except Exception as exc:
@@ -907,7 +943,7 @@ def list_results():
         try:
             run=json.loads(file.read_text(encoding="utf-8"))
             # Keep the index small; full kernel matrices are returned only by get_result.
-            item={k:run.get(k) for k in ("schema_version","run_id","created_at","synthetic","label","config_hash","dataset","config","preprocessing","artifacts","metrics","verdict","limitations","protocol","balanced_subset_notice","experiment_group","kernel_cache","circuit_example") if k in run}
+            item={k:run.get(k) for k in ("schema_version","run_id","created_at","synthetic","label","config_hash","dataset","config","preprocessing","artifacts","metrics","verdict","limitations","protocol","balanced_subset_notice","experiment_group","kernel_cache","circuit_example","seed_summaries") if k in run}
             lab=run.get("noise_lab",{})
             if lab:
                 mit_data = lab.get("mitigation") or {}
@@ -939,7 +975,18 @@ def get_kernel_heatmap(run_id: str, seed: int = 0):
             if key not in stored: raise HTTPException(404,"That seed's kernel matrix was not saved.")
             matrix=stored[key]
     except (OSError,ValueError) as exc: raise HTTPException(400,"Saved kernel matrix could not be read.") from exc
-    return {"run_id":run_id,"seed":seed,"matrix":matrix.tolist(),"fraud_rows_first":True,"divider_after":run.get("kernel_heatmap",{}).get("divider_after"),"label":"Software simulation"}
+    divider = int(run.get("kernel_heatmap",{}).get("divider_after") or 0)
+    # Descriptive kernel geometry only; this is not a prediction metric.
+    upper = np.triu(np.ones(matrix.shape, dtype=bool), k=1)
+    fraud = np.arange(matrix.shape[0]) < divider
+    groups = {
+        "within_fraud": upper & fraud[:, None] & fraud[None, :],
+        "within_legitimate": upper & ~fraud[:, None] & ~fraud[None, :],
+        "cross_class": fraud[:, None] != fraud[None, :],
+    }
+    geometry = {name: float(matrix[mask].mean()) if mask.any() else None for name, mask in groups.items()}
+    return {"run_id":run_id,"seed":seed,"matrix":matrix.tolist(),"fraud_rows_first":True,
+            "divider_after":divider,"geometry":geometry,"label":"Software simulation"}
 
 
 def _generate_markdown_report(run: dict) -> str:
@@ -1357,85 +1404,24 @@ def score(req: ScoreRequest):
 
 @app.get("/api/sample-transactions")
 def sample_transactions():
-    """Return pre-configured sample transactions (fraudulent and legitimate) for testing."""
-    samples_data = {
-        "fraud_high_risk": {
-            "id": "fraud_high_risk",
-            "label": "High-Risk Fraud (Anomaly on V14, V12, V10, V17)",
-            "actual_class": 1,
-            "description": "Exhibits classic credit card fraud anomaly patterns with extreme negative deviations on principal components V14, V12, and V10.",
-            "features": {
-                "Time": 406.0, "Amount": 149.62,
-                "V1": -2.31, "V2": 1.95, "V3": -1.61, "V4": 3.99, "V5": -0.52,
-                "V6": -1.43, "V7": -2.54, "V8": 1.39, "V9": -2.77, "V10": -5.52,
-                "V11": 3.20, "V12": -6.07, "V13": -0.60, "V14": -6.65, "V15": 0.17,
-                "V16": -4.58, "V17": -8.54, "V18": -2.75, "V19": 0.42, "V20": 0.13,
-                "V21": 0.52, "V22": -0.04, "V23": -0.47, "V24": 0.32, "V25": 0.04,
-                "V26": 0.18, "V27": 0.26, "V28": -0.14
-            },
-            "values": {
-                "Time": 406.0, "Amount": 149.62,
-                "V1": -2.31, "V2": 1.95, "V3": -1.61, "V4": 3.99, "V5": -0.52,
-                "V6": -1.43, "V7": -2.54, "V8": 1.39, "V9": -2.77, "V10": -5.52,
-                "V11": 3.20, "V12": -6.07, "V13": -0.60, "V14": -6.65, "V15": 0.17,
-                "V16": -4.58, "V17": -8.54, "V18": -2.75, "V19": 0.42, "V20": 0.13,
-                "V21": 0.52, "V22": -0.04, "V23": -0.47, "V24": 0.32, "V25": 0.04,
-                "V26": 0.18, "V27": 0.26, "V28": -0.14
-            }
-        },
-        "legitimate_normal": {
-            "id": "legitimate_normal",
-            "label": "Typical Legitimate Grocery Transaction",
-            "actual_class": 0,
-            "description": "Standard retail card payment with normal variance centered near zero on all principal components.",
-            "features": {
-                "Time": 76552.0, "Amount": 24.50,
-                "V1": 1.15, "V2": 0.15, "V3": 0.35, "V4": 0.50, "V5": -0.20,
-                "V6": -0.30, "V7": 0.05, "V8": 0.02, "V9": 0.10, "V10": -0.05,
-                "V11": 0.40, "V12": 0.30, "V13": -0.20, "V14": 0.15, "V15": 0.80,
-                "V16": 0.20, "V17": -0.15, "V18": -0.10, "V19": -0.05, "V20": -0.02,
-                "V21": -0.18, "V22": -0.45, "V23": 0.10, "V24": -0.02, "V25": 0.25,
-                "V26": 0.10, "V27": -0.02, "V28": 0.01
-            },
-            "values": {
-                "Time": 76552.0, "Amount": 24.50,
-                "V1": 1.15, "V2": 0.15, "V3": 0.35, "V4": 0.50, "V5": -0.20,
-                "V6": -0.30, "V7": 0.05, "V8": 0.02, "V9": 0.10, "V10": -0.05,
-                "V11": 0.40, "V12": 0.30, "V13": -0.20, "V14": 0.15, "V15": 0.80,
-                "V16": 0.20, "V17": -0.15, "V18": -0.10, "V19": -0.05, "V20": -0.02,
-                "V21": -0.18, "V22": -0.45, "V23": 0.10, "V24": -0.02, "V25": 0.25,
-                "V26": 0.10, "V27": -0.02, "V28": 0.01
-            }
-        },
-        "borderline_suspicious": {
-            "id": "borderline_suspicious",
-            "label": "Borderline / High-Amount Transaction",
-            "actual_class": 1,
-            "description": "Elevated transaction amount with moderate deviations on fraud-correlated components.",
-            "features": {
-                "Time": 119714.0, "Amount": 1250.00,
-                "V1": -1.20, "V2": 1.10, "V3": -0.85, "V4": 1.60, "V5": -0.40,
-                "V6": -0.75, "V7": -1.10, "V8": 0.65, "V9": -1.20, "V10": -2.10,
-                "V11": 1.45, "V12": -2.30, "V13": -0.10, "V14": -2.80, "V15": 0.05,
-                "V16": -1.80, "V17": -3.10, "V18": -1.05, "V19": 0.30, "V20": 0.25,
-                "V21": 0.30, "V22": 0.10, "V23": -0.15, "V24": 0.05, "V25": 0.10,
-                "V26": 0.05, "V27": 0.12, "V28": -0.05
-            },
-            "values": {
-                "Time": 119714.0, "Amount": 1250.00,
-                "V1": -1.20, "V2": 1.10, "V3": -0.85, "V4": 1.60, "V5": -0.40,
-                "V6": -0.75, "V7": -1.10, "V8": 0.65, "V9": -1.20, "V10": -2.10,
-                "V11": 1.45, "V12": -2.30, "V13": -0.10, "V14": -2.80, "V15": 0.05,
-                "V16": -1.80, "V17": -3.10, "V18": -1.05, "V19": 0.30, "V20": 0.25,
-                "V21": 0.30, "V22": 0.10, "V23": -0.15, "V24": 0.05, "V25": 0.10,
-                "V26": 0.05, "V27": 0.12, "V28": -0.05
-            }
-        }
-    }
-    return {
-        "samples": list(samples_data.values()),
-        **samples_data
-    }
+    """Return actually labelled rows from the active dataset; never invent examples."""
+    frame = dataset.get("frame")
+    if frame is None:
+        return {"samples": [], "message": "Load a dataset to use dataset-labelled transaction examples."}
+    features = [f"V{i}" for i in range(1, 29)] + ["Time", "Amount"]
+    samples = []
+    for label, name in ((0, "Dataset-labelled legitimate example"), (1, "Dataset-labelled fraud example")):
+        matches = frame.index[frame["Class"] == label]
+        if len(matches) == 0:
+            continue
+        row_id = matches[0]
+        row = frame.loc[row_id]
+        values = {feature: float(row[feature]) for feature in features}
+        samples.append({"id": f"row-{row_id}", "label": name, "actual_class": label,
+                        "description": f"Selected from loaded dataset {dataset.get('name')}; row ID {row_id}.",
+                        "row_id": str(row_id), "features": values, "values": values})
+    return {"samples": samples, "dataset_name": dataset.get("name"), "sha256": dataset.get("sha256"),
+            "message": "Examples use actual Class labels from the loaded dataset."}
 
 
 @app.get("/api/resources")

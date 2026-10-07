@@ -68,6 +68,13 @@ are fit using training data only.
 
 ## What works in this prototype
 
+- A judge-oriented research dashboard centered on the scarce-label question,
+  with a four-budget scarcity curve populated only from saved benchmark runs,
+  paired verdict details, pre-run estimates for complete grids, and a
+  rule-based experiment planner.
+- A one-click staged judge demo with visible benchmark/noise/mitigation
+  progress and saved evidence replay. It is explicitly a staged showcase: the
+  noisy and mitigated stages use a separate balanced subset protocol.
 - Dataset validation and live class-balance statistics.
 - Qiskit feature-map inspection and exact statevector kernel-pair explorer.
 - Background, cancellable ideal benchmark jobs with ten configurable seeds,
@@ -81,7 +88,16 @@ are fit using training data only.
 - A SHA-256-keyed, 512 MiB-bounded local kernel-matrix cache keyed by dataset,
   data splits, preprocessing, and feature-map configuration.
 - Cross-run configuration replay and a saved-run review with run-specific
-  metrics, verdict, configuration, and kernel heatmap.
+  metrics, verdict, configuration, dataset hash, seed summaries, and kernel
+  heatmap; the run registry also compares selected configurations.
+- A Fraud Case Lab with actual-vs-predicted labels, disagreement counts, and
+  filters for fraud-labelled cases each model catches while the other misses.
+- Kernel-geometry means (within-fraud, within-legitimate, and cross-class)
+  calculated from the saved training matrix. These are descriptive similarities,
+  not predictive performance metrics.
+- Dataset validation checklist and data provenance. Example transactions are
+  selected from the loaded dataset and retain their real `Class` labels; no
+  hand-authored sample is presented as labelled data.
 - An exact local runtime estimate for ideal kernel construction. It does not
   include CV/model fitting and is an extrapolation, not a completion-time
   guarantee.
@@ -101,6 +117,9 @@ The ideal benchmark and small noisy/ZNE demonstration are separate protocols.
 The noise demonstration uses at least three seeds and a fixed 30/30 balanced
 subset per seed; it does not implement the full 100-fraud/400-normal test
 protocol for noisy or mitigated runs.
+There is no same-split, full-protocol Aer noise benchmark yet. The Dashboard
+and Noise Lab keep the quick controlled simulation separate from the main
+benchmark so judges do not mistake the two result sets for paired evidence.
 The ablation grids and shot sweep run as multiple independent jobs and may be
 long; the estimator covers kernel/simulator work and is not a completion-time
 guarantee. Noise sweeps use balanced demo subsets, not the full ideal benchmark
@@ -119,7 +138,9 @@ uncertain, and this work cannot establish universal quantum advantage.
 
 - `frontend/`: React, TypeScript and Vite user interface.
 - `backend/app/`: FastAPI API, dataset checks, Qiskit utilities, benchmark job
-  workers, Qiskit Aer noise and mitigation experiment.
+  workers, Qiskit Aer noise and mitigation experiment. These research routes
+  remain in a consolidated module for this prototype; splitting them into
+  separate API/domain packages is future maintenance work.
 - `datasets/`: user-managed local data; files are ignored by Git.
 - `results/`: generated experiment folders; files are ignored by Git.
 - `frontend/src/content.ts`: centralized application copy.
