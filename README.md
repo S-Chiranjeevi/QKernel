@@ -7,33 +7,37 @@ Quantum, or quantum cloud services. No dataset ships with the project.
 
 ## Deploy the hosted app
 
-The frontend is a Vercel static site and the API is a persistent Render web
-service. The Render service definition in `render.yaml` installs the Python
-dependencies, starts Uvicorn, mounts a persistent disk for experiment results
-and uploaded datasets, and allows requests from `https://qkernel.vercel.app`.
-The configured worker uses 2 CPU cores, 4 GB memory, and a 5 GB persistent
-disk; Render requires a paid service for persistent disks.
+The frontend is a Vercel static site and the API is a Render Free web service.
+The Render service definition in `render.yaml` installs the Python dependencies,
+starts Uvicorn, and allows requests from `https://qkernel.vercel.app`. Free
+services have limited CPU and memory, sleep after 15 minutes without traffic,
+and do not have persistent disks.
 
 1. Push this repository to GitHub and create a Render Blueprint from it. Render
    reads `render.yaml`; wait for the `qkernel-api` deployment to become live.
 2. Open `https://qkernel-api.onrender.com/api/health`. A healthy response has
-   `status: "ok"` and `execution_mode: "persistent-worker"`.
+   `status: "ok"` and `execution_mode: "hosted-free-worker"`.
 3. In the Vercel project settings, set the production environment variable
    `VITE_API_URL` to `https://qkernel-api.onrender.com` (no trailing slash),
    then redeploy the frontend. Vite embeds this value during the build.
-4. Open `https://qkernel.vercel.app`, confirm it reports a connected persistent
-   worker, then upload your CSV and run the experiments.
+4. Open `https://qkernel.vercel.app`, confirm it reports a connected free
+   worker, then upload a CSV and try the demo workflow.
 
 If Render assigns a different service URL, use that URL in Vercel. The Render
-Blueprint's `CORS_ALLOW_ORIGINS` must include the exact frontend origin. The
-API's `QKERNEL_DATA_DIR` points to the mounted disk; result files and uploaded
-CSV data survive service restarts. Running benchmark jobs stop when a worker
-restarts or redeploys, so restart any interrupted jobs.
+Blueprint's `CORS_ALLOW_ORIGINS` must include the exact frontend origin. On the
+Free plan, uploaded datasets and saved results live only on the running
+instance; they can disappear when it sleeps, restarts, or redeploys. Keep the
+site active during experiments, and upload the dataset again if the worker
+restarts. The first request after 15 minutes of inactivity can take about a
+minute while Render wakes the service. Free-tier CPU and memory may also limit
+the size or speed of Qiskit benchmarks.
 
 ## Start the application
 
-The full research workflow requires a persistent FastAPI worker. For local
-development, run the API and frontend as separate processes:
+The full research workflow is most reliable with a persistent FastAPI worker.
+The Render Free service is suitable for a no-cost demonstration, with the
+storage, sleep, and compute limitations described above. For local development,
+run the API and frontend as separate processes:
 
 Requirements: Python 3.11 or newer and Node.js 20 or newer.
 

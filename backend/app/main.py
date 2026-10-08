@@ -165,9 +165,10 @@ def health():
     default_csv = (ROOT / "datasets" / "raw" / "creditcard.csv").is_file()
     serverless = SERVERLESS
     persistent_volume = bool(_data_dir)
-    remote_worker = os.environ.get("QKERNEL_DEPLOYMENT") == "render"
+    deployment = os.environ.get("QKERNEL_DEPLOYMENT", "")
+    remote_worker = deployment in {"render", "render-free"}
     return {"status": "ok", "mode": "local software simulation",
-            "execution_mode": "vercel-serverless" if serverless else "persistent-worker" if remote_worker else "local-worker",
+            "execution_mode": "vercel-serverless" if serverless else "hosted-free-worker" if deployment == "render-free" else "persistent-worker" if remote_worker else "local-worker",
             "persistent_background_jobs": not serverless,
             "persistent_results": persistent_volume or (not serverless and not remote_worker),
             "supports_local_paths": not serverless and not remote_worker,
