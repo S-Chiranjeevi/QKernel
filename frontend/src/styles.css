@@ -162,6 +162,8 @@ button{transition:background-color .16s ease,border-color .16s ease,transform .1
 .config>span{grid-column:1/-1;background:#fff;border:1px solid var(--line);border-radius:9px;padding:12px 14px;line-height:1.55;font-size:12px}
 .config>span small{font-size:11px}
 .config .btn{align-self:end;justify-self:start}
+.judge-demo-btn{background:#fff!important;color:var(--ink)!important;border:1px solid var(--line)!important}
+.judge-demo-btn:hover{background:#f5f7f6!important}
 .formula,.circuit{border-radius:9px;font-size:12px}
 .table{border:1px solid var(--line);border-radius:10px}
 table{font-size:11px}
@@ -194,6 +196,7 @@ footer{font-size:10px;padding:20px 0}
  .hero{background:radial-gradient(ellipse at 82% 8%,#4a362d 0,transparent 38%),linear-gradient(120deg,#253630,#23323a);border-color:#3b4b4b}
  .hero p,.simline,.section p{color:#b7c2c5}
  .hero-atom>div{background:#ffffff08;border-color:#50635b}
+ .judge-demo-btn{background:#24333a!important;color:var(--ink)!important;border-color:#4a5b61!important}
  .stat{background:var(--white);border-color:#34434a;box-shadow:0 5px 18px #0002}
  .stat:last-child{border-color:#34434a}
  .section{background:var(--white);border-color:#34434a;box-shadow:0 5px 18px #0002}
