@@ -108,7 +108,7 @@ are fit using training data only.
 - Eight-configuration entanglement ablation (k = 6, 10, 20, 50 × RZZ on/off)
   and nine-configuration feature-map scaling sweep (4/6/8 qubits × 1/2/3
   repeats), each with mean ± standard deviation across seeds.
-- A 256/1024/4096 shot sweep with seed standard-deviation error bars, and a
+- A fast 128/256/512 shot sweep with seed standard-deviation error bars, and a
   local one-click judge demo that sequences ideal, noisy, and mitigated runs.
 - A SHA-256-keyed, 512 MiB-bounded local kernel-matrix cache keyed by dataset,
   data splits, preprocessing, and feature-map configuration.
@@ -127,7 +127,7 @@ are fit using training data only.
   include CV/model fitting and is an extrapolation, not a completion-time
   guarantee.
 - Four-qubit Qiskit Aer noise and zero-noise extrapolation demonstrations across
-  three or five independent seeds, each using a balanced 60-row subset. These
+  three or five independent seeds, each using a balanced 30-row quick subset. These
   remain quick demos, not full-protocol benchmark evidence.
 - Result listing/export, including the Markdown report, saved prediction
   exploration, and saved ideal training-kernel heatmaps.

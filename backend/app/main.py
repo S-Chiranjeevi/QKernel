@@ -378,7 +378,7 @@ def runtime_grid_estimate(type: Literal["scarcity-curve", "entanglement-ablation
 
 @app.get("/api/runtime-estimate/noise")
 def noise_runtime_estimate(preset: Literal["LOW","MEDIUM","HIGH"]="MEDIUM", shots: int=256, mitigation: bool=False, seeds: int=1):
-    if shots not in (256,1024,4096): raise HTTPException(400,"Choose 256, 1024 or 4096 shots.")
+    if shots not in (128,256,512,1024,4096): raise HTTPException(400,"Choose 128, 256, 512, 1024 or 4096 shots.")
     if seeds not in (1,3,5): raise HTTPException(400,"Choose 1, 3 or 5 seeds for the local demo estimate.")
     try:
         import numpy as np
@@ -391,14 +391,15 @@ def noise_runtime_estimate(preset: Literal["LOW","MEDIUM","HIGH"]="MEDIUM", shot
     for scale in (1,3,5) if mitigation else (1,):
         qc=fold(base,scale);qc.measure_all();compiled=transpile(qc,sim,optimization_level=0)
         t0=time.perf_counter();sim.run(compiled,shots=shots,seed_simulator=5).result().get_counts();elapsed+=time.perf_counter()-t0
-    ntrain=40;ntest=20;per_scale=ntrain*(ntrain+1)//2+ntest*ntrain;entries=per_scale*(3 if mitigation else 1)
+    # The fast Noise Lab protocol uses 15 examples per class: 20 train + 10 test.
+    ntrain=20;ntest=10;per_scale=ntrain*(ntrain+1)//2+ntest*ntrain;entries=per_scale*(3 if mitigation else 1)
     measured_scales=3 if mitigation else 1
     per_entry=elapsed/(measured_scales)
     p2=PRESETS[preset][1]
     gates_per_pair=2*math.comb(4,2)
     signal={str(scale):float((1-p2)**(gates_per_pair*scale)) for scale in ((1,3,5) if mitigation else (1,))}
     entries*=seeds
-    return {"label":"Software simulation","mode":"parameterized Aer noise","preset":preset,"shots":shots,"mitigation":mitigation,"seed_count":seeds,"calibration_circuits":measured_scales,"estimated_kernel_entries":entries,"estimated_seconds":per_entry*entries,"train_rows":ntrain,"test_rows":ntest,"estimated_two_qubit_gates_per_pair":gates_per_pair,"estimated_surviving_signal":signal,"signal_warning":signal.get("1",1)<0.2,"message":"Local estimate from measured Aer circuit time; compilation, PCA, fitting, disk I/O and machine load add time. Noise Lab uses a balanced 60-row demo per seed."}
+    return {"label":"Software simulation","mode":"parameterized Aer noise","preset":preset,"shots":shots,"mitigation":mitigation,"seed_count":seeds,"calibration_circuits":measured_scales,"estimated_kernel_entries":entries,"estimated_seconds":per_entry*entries,"train_rows":ntrain,"test_rows":ntest,"estimated_two_qubit_gates_per_pair":gates_per_pair,"estimated_surviving_signal":signal,"signal_warning":signal.get("1",1)<0.2,"message":"Estimate uses measured Aer circuit time and the 30-row quick protocol; compilation, PCA, fitting, disk I/O and worker load add time. Results are exploratory, not conclusion-grade."}
 
 
 class PairRequest(BaseModel):
@@ -480,7 +481,9 @@ def _run_noise_sweep(parent_id: str, frame, qubits: int, preset: str, seed_count
                      synthetic: bool, dataset_name: str, dataset_hash: str):
     completed: list[str] = []
     jobs[parent_id]["run_ids"] = completed
-    for index, shots in enumerate((256, 1024, 4096)):
+    # Keep the sweep useful for a live demo on a small free worker. Higher
+    # shot counts remain selectable for a single run when more time is available.
+    for index, shots in enumerate((128, 256, 512)):
         if jobs[parent_id].get("cancel_requested"):
             jobs[parent_id].update(status="cancelled", message="Shot sweep cancelled between shot settings.", run_ids=completed)
             return
@@ -601,19 +604,19 @@ def create_job(req: JobRequest):
         seeds = int(req.config.get("seed_count", 3)); budget = int(req.config.get("time_budget_seconds", 7200))
         if preset not in ("LOW", "MEDIUM", "HIGH") or seeds not in (3, 5):
             raise HTTPException(400, "Choose a noise preset and 3 or 5 independent seeds.")
-        if int((frame.Class == 1).sum()) < 30 or int((frame.Class == 0).sum()) < 30:
-            raise HTTPException(400, "The shots sweep needs at least 30 fraud and 30 legitimate rows.")
-        estimate_seconds = sum(float(noise_runtime_estimate(preset, shot, False, seeds)["estimated_seconds"]) for shot in (256, 1024, 4096))
+        if int((frame.Class == 1).sum()) < 15 or int((frame.Class == 0).sum()) < 15:
+            raise HTTPException(400, "The quick Noise Lab needs at least 15 fraud and 15 legitimate rows.")
+        estimate_seconds = sum(float(noise_runtime_estimate(preset, shot, False, seeds)["estimated_seconds"]) for shot in (128, 256, 512))
         if estimate_seconds > budget:
             raise HTTPException(413, f"The three-shot sweep estimates {estimate_seconds/60:.1f} minutes. Increase the time budget or use fewer seeds.")
         group_id = uuid.uuid4().hex[:12]
         jobs[group_id] = {"job_id": group_id, "type": req.type, "status": "queued", "progress": 0,
-                          "message": "Queued shot settings 256, 1024 and 4096.", "cancel_requested": False,
+                          "message": "Queued shot settings 128, 256 and 512.", "cancel_requested": False,
                           "synthetic": bool(dataset.get("synthetic", False)), "run_ids": [],
                           "estimated_seconds": estimate_seconds}
         threading.Thread(target=_run_noise_sweep, args=(group_id, frame, 4, preset, seeds,
                           bool(dataset.get("synthetic", False)), dataset["name"], dataset["sha256"]), daemon=True).start()
-        return {"job_id": group_id, "status": "queued", "message": f"Queued 256/1024/4096 shot sweep, {seeds} seeds per setting."}
+        return {"job_id": group_id, "status": "queued", "message": f"Queued 128/256/512 shot sweep, {seeds} seeds per setting."}
 
     if req.type == "judge-demo":
         preset = str(req.config.get("noise_preset", "LOW")).upper()
@@ -641,18 +644,18 @@ def create_job(req: JobRequest):
         seed_count=int(req.config.get("seed_count",3))
         budget=int(req.config.get("time_budget_seconds",1800))
         if qubits!=4: raise HTTPException(400,"The bounded Aer noise demonstration currently supports 4 qubits.")
-        if shots not in (256,1024,4096): raise HTTPException(400,"Choose 256, 1024 or 4096 shots.")
+        if shots not in (128,256,512,1024,4096): raise HTTPException(400,"Choose 128, 256, 512, 1024 or 4096 shots.")
         if preset not in ("LOW","MEDIUM","HIGH"): raise HTTPException(400,"Choose a LOW, MEDIUM or HIGH noise preset.")
         if seed_count not in (3,5): raise HTTPException(400,"Noise and mitigation experiments require 3 or 5 independent seeds.")
         if budget<60 or budget>86400: raise HTTPException(400,"Choose a time budget between 60 seconds and 24 hours.")
-        if int((frame.Class==1).sum())<30 or int((frame.Class==0).sum())<30:
-            raise HTTPException(400,"This local noise demonstration needs at least 30 fraud and 30 legitimate transactions.")
+        if int((frame.Class==1).sum())<15 or int((frame.Class==0).sum())<15:
+            raise HTTPException(400,"This quick Noise Lab needs at least 15 fraud and 15 legitimate transactions.")
         estimate=noise_runtime_estimate(preset,shots,req.type=="mitigation",seed_count)
         if estimate["estimated_seconds"]>budget: raise HTTPException(413,"The local Aer simulation exceeds the selected time budget. Lower the shot count or choose a smaller experiment.")
         job_id=uuid.uuid4().hex[:12]
         jobs[job_id]={"job_id":job_id,"type":req.type,"status":"queued","progress":0,"message":"Waiting for a local Aer worker.","cancel_requested":False,"synthetic":bool(dataset.get("synthetic",False)),"label":"Software simulation"}
         threading.Thread(target=_run_noise_job,args=(job_id,frame,qubits,preset,shots,req.type=="mitigation",seed_count,bool(dataset.get("synthetic",False)),dataset["name"],dataset["sha256"]),daemon=True).start()
-        return {"job_id":job_id,"status":"queued","message":f"{seed_count}-seed balanced 60-row software simulation queued."}
+        return {"job_id":job_id,"status":"queued","message":f"{seed_count}-seed balanced 30-row quick software simulation queued."}
     k = int(req.config.get("fraud_labels", 10))
     seeds = int(req.config.get("seed_count", 10))
     qubits = int(req.config.get("qubits", 6))
@@ -947,8 +950,8 @@ def _run_noise_job(job_id, frame, qubits, preset, shots, mitigate, seed_count, s
                 recoveries=[(m-x["noisy"]["PR-AUC"])/gap for m,x,gap in zip(mitigated,results,gaps) if gap>max(.02,gap_std)]
                 result["recovery"]={"mean":float(np.mean(recoveries)),"std":float(np.std(recoveries,ddof=1)) if len(recoveries)>1 else 0.0,"seed_count":len(recoveries)} if recoveries else None
                 result["recovery_note"]="Recovery is the paired mean (mitigated − noisy) / (ideal − noisy), reported only when ideal-to-noisy degradation exceeds 0.02 and its across-seed standard deviation."
-        result["protocol"]=f"Quick demo, too small for conclusions · {seed_count} independent balanced 60-row seeds"
-        result["limitations"]=["Quick demo, too small for conclusions.",first["balanced_subset_notice"],f"{seed_count} seeds are reported, but each uses only 30 fraud and 30 legitimate rows; this does not meet the full benchmark protocol.","Noise values are a parameterized simulator model, not measured hardware noise.","This demonstration uses fixed model parameters and is not the full benchmark CV protocol."]
+        result["protocol"]=f"Quick demo, too small for conclusions · {seed_count} independent balanced 30-row seeds"
+        result["limitations"]=["Quick demo, too small for conclusions.",first["balanced_subset_notice"],f"{seed_count} seeds are reported, but each uses only 15 fraud and 15 legitimate rows; this does not meet the full benchmark protocol.","Noise values are a parameterized simulator model, not measured hardware noise.","This demonstration uses fixed model parameters and is not the full benchmark CV protocol."]
         config={"mode":"quick-demo-noise","fraud_labels_per_run":int(first["fraud_labels_train"]),"seed_count":seed_count,"seeds":list(range(seed_count)),"qubits":qubits,"repeats":1,"shots":shots,"noise_preset":preset,"mitigation":mitigate,"noise_values":first["noise_values"]}
         run={"schema_version":"1.0","run_id":run_id,"created_at":datetime.now(timezone.utc).isoformat(),"synthetic":synthetic,"label":"Software simulation","config_hash":hashlib.sha256(json.dumps(config,sort_keys=True).encode()).hexdigest(),"dataset":{"name":dataset_name,"sha256":dataset_hash,"rows":len(frame)},"config":config,"protocol":result["protocol"],"balanced_subset_notice":result["balanced_subset_notice"],"metrics":rows,"verdict":{"overall":"Not enough evidence"},"noise_lab":result,"limitations":result["limitations"]}
         out=RESULTS/run_id;out.mkdir(parents=True,exist_ok=False)

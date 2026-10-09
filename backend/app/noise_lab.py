@@ -100,18 +100,18 @@ def score_kernel(ktrain,ktest,ytrain,ytest,repair=False):
     return {"PR-AUC":float(average_precision_score(ytest,decision)),"recall":float(recall_score(ytest,pred,zero_division=0)),"precision":float(precision_score(ytest,pred,zero_division=0)),"F1":float(f1_score(ytest,pred,zero_division=0)),"ROC-AUC":float(roc_auc_score(ytest,decision)),"accuracy":float(np.mean(pred==ytest)),"fit_time":fit,"prediction_time":predict},decision
 
 def run_lab(frame,qubits=4,preset="MEDIUM",shots=256,seed=0,mitigate=False,synthetic=False,progress=lambda *_:None):
-    """Run one balanced 60-row demonstration. It is never conclusion-grade."""
+    """Run one balanced 30-row demonstration. It is never conclusion-grade."""
     features=[*(f"V{i}" for i in range(1,29)),"Amount"]
     y=frame.Class.to_numpy(dtype=int); pos=np.flatnonzero(y==1); neg=np.flatnonzero(y==0)
-    if len(pos)<30 or len(neg)<30: raise ValueError("Noise Lab needs at least 30 fraud and 30 legitimate rows for its balanced 60-row demo.")
-    rng=np.random.default_rng(seed); ids=np.r_[rng.choice(pos,30,replace=False),rng.choice(neg,30,replace=False)]; rng.shuffle(ids)
+    if len(pos)<15 or len(neg)<15: raise ValueError("Noise Lab needs at least 15 fraud and 15 legitimate rows for its balanced 30-row demo.")
+    rng=np.random.default_rng(seed); ids=np.r_[rng.choice(pos,15,replace=False),rng.choice(neg,15,replace=False)]; rng.shuffle(ids)
     X=frame.iloc[ids][features].to_numpy(dtype=float); labels=y[ids]
-    itr,ite=train_test_split(np.arange(60),test_size=1/3,random_state=seed,stratify=labels)
+    itr,ite=train_test_split(np.arange(30),test_size=1/3,random_state=seed,stratify=labels)
     ytr,yte=labels[itr],labels[ite]
     standard=StandardScaler().fit(X[itr]); xs=standard.transform(X[itr]); xv=standard.transform(X[ite])
     pca=PCA(n_components=qubits,random_state=seed).fit(xs); ztr=pca.transform(xs); zte=pca.transform(xv)
     mm=MinMaxScaler((0,math.pi),clip=True).fit(ztr); atr=mm.transform(ztr); ate=mm.transform(zte)
-    progress(10,"Prepared a balanced 60-row demonstration subset.")
+    progress(10,"Prepared a balanced 30-row quick demonstration subset.")
     ideal_train=exact_kernel(atr,atr,True); ideal_test=exact_kernel(ate,atr,False)
     ideal_metrics,_=score_kernel(ideal_train,ideal_test,ytr,yte)
     model=make_noise(preset); progress(20,"Building simulated compute-uncompute circuits.")
