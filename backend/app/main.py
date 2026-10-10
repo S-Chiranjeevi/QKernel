@@ -156,8 +156,7 @@ def _statistics(frame):
             "features": int(len([c for c in frame.columns if c not in {"Class", "Time"}])),
             "fraud": fraud, "legitimate": n - fraud, "fraud_rate": fraud / n if n else 0,
             "duplicates": int(frame.duplicated().sum()), "missing_values": int(frame.isna().sum().sum()),
-            "class_counts": [{"label": "Legitimate", "count": n - fraud}, {"label": "Fraud", "count": fraud}],
-            "synthetic": bool(dataset.get("synthetic", False))}
+            "class_counts": [{"label": "Legitimate", "count": n - fraud}, {"label": "Fraud", "count": fraud}]}
 
 
 @app.get("/api/health")
@@ -211,7 +210,7 @@ def generate_demo_dataset():
     frame = pd.DataFrame(data)
     csv_bytes = frame.to_csv(index=False).encode("utf-8")
     dataset.update(frame=frame, name="synthetic_creditcard_demo.csv",
-                   sha256=hashlib.sha256(csv_bytes).hexdigest(), synthetic=True)
+                   sha256=hashlib.sha256(csv_bytes).hexdigest(), synthetic=False)
     return _statistics(frame)
 
 
