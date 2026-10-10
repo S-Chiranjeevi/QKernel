@@ -1,48 +1,149 @@
+<div align="center">
+
 # Q-Fraud Intelligence
 
-A research prototype for comparing classical fraud classifiers with a
-Qiskit quantum-kernel SVM and simulated noise. The software uses Qiskit and
-Qiskit Aer in a Python worker. It does not connect to quantum hardware, IBM
-Quantum, or quantum cloud services. No dataset ships with the project.
+### A quantum-kernel research lab for fraud detection when confirmed labels are scarce
 
-## Deploy the hosted app
+**We don't assume quantum advantage. We measure it.**
 
-The frontend is a Vercel static site and the API is a Render Free web service.
-The Render service definition in `render.yaml` installs the Python dependencies,
-starts Uvicorn, and allows requests from `https://qkernel.vercel.app`. Free
-services have limited CPU and memory, sleep after 15 minutes without traffic,
-and do not have persistent disks.
+[![Live demo](https://img.shields.io/badge/Live%20Demo-qkernel.vercel.app-111827?style=for-the-badge&logo=vercel)](https://qkernel.vercel.app)
+[![API](https://img.shields.io/badge/API-FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://qkernel-api.onrender.com/docs)
+[![Frontend](https://img.shields.io/badge/Frontend-React%20%2B%20TypeScript-3178C6?style=for-the-badge&logo=react&logoColor=white)](https://github.com/S-Chiranjeevi/QKernel/tree/main/frontend)
+[![Quantum](https://img.shields.io/badge/Quantum-Qiskit%20%2B%20Aer-6929C4?style=for-the-badge)](https://quantum.cloud.ibm.com/docs)
 
-1. Push this repository to GitHub and create a Render Blueprint from it. Render
-   reads `render.yaml`; wait for the `qkernel-api` deployment to become live.
-2. Open `https://qkernel-api.onrender.com/api/health`. A healthy response has
-   `status: "ok"` and `execution_mode: "hosted-free-worker"`.
-3. In the Vercel project settings, set the production environment variable
-   `VITE_API_URL` to `https://qkernel-api.onrender.com` (no trailing slash),
-   then redeploy the frontend. Vite embeds this value during the build.
-4. Open `https://qkernel.vercel.app`, confirm it reports a connected free
-   worker, then upload a CSV and try the demo workflow.
+[Try the dashboard](https://qkernel.vercel.app) · [Open API docs](https://qkernel-api.onrender.com/docs) · [Report an issue](https://github.com/S-Chiranjeevi/QKernel/issues)
 
-If Render assigns a different service URL, use that URL in Vercel. The Render
-Blueprint's `CORS_ALLOW_ORIGINS` must include the exact frontend origin. On the
-Free plan, uploaded datasets and saved results live only on the running
-instance; they can disappear when it sleeps, restarts, or redeploys. Keep the
-site active during experiments, and upload the dataset again if the worker
-restarts. The first request after 15 minutes of inactivity can take about a
-minute while Render wakes the service. Free-tier CPU and memory may also limit
-the size or speed of Qiskit benchmarks.
+</div>
 
-## Start the application
+---
 
-The full research workflow is most reliable with a persistent FastAPI worker.
-The Render Free service is suitable for a no-cost demonstration, with the
-storage, sleep, and compute limitations described above. For local development,
-run the API and frontend as separate processes:
+## The question
 
-Requirements: Python 3.11 or newer and Node.js 20 or newer.
+Fraud is rare, confirmed examples can be scarce, and accuracy can hide missed fraud. **Can a quantum feature-space kernel help a classifier separate fraud from legitimate transactions when only a few fraud labels are available?**
 
-From the project root, install backend packages and create the local
-environment:
+Q-Fraud Intelligence is a browser-based research prototype for testing that question with controlled splits, multiple classical baselines, repeated seeds, and transparent caveats. It also lets you inspect the feature map, explore simulated noise, and review saved predictions.
+
+> **Research prototype:** quantum circuits run in local software simulation. This project does not connect to a quantum processor, does not claim quantum advantage, and is not a production payment decision system.
+
+## At a glance
+
+| | |
+|---|---|
+| **Research focus** | Classical fraud models vs. an ideal Qiskit quantum-kernel SVM under scarce labels |
+| **Primary metric** | PR-AUC / average precision, with recall, precision, F1, ROC-AUC, and accuracy |
+| **Quantum execution** | Exact Qiskit statevector kernels and Qiskit Aer noise simulation |
+| **Web app** | React + TypeScript + Vite on Vercel |
+| **API worker** | Python + FastAPI + scikit-learn + Qiskit on Render |
+| **Saved evidence** | Configuration, seeds, data hash, metrics, predictions, and kernel artifacts |
+
+## What the current benchmark says
+
+The repository contains four saved ideal benchmark runs on the ULB/Worldline credit-card dataset. Each run uses ten deterministic seeds and a balanced held-out evaluation subset. The CV-selected classical model had higher mean PR-AUC at every tested fraud-label budget:
+
+| Fraud labels used for training | Quantum ideal PR-AUC | Best classical PR-AUC | Saved verdict |
+|---:|---:|---:|---|
+| 6 | 0.67 | 0.89 | Classical preferred |
+| 10 | 0.83 | 0.91 | Classical preferred |
+| 20 | 0.85 | 0.93 | Classical preferred |
+| 50 | 0.88 | 0.93 | Classical preferred |
+
+These values describe the saved experiment and its data protocol; they are not a promise of performance on live transactions. The current saved evidence is for **ideal** kernels. The Noise and Mitigation labs are separate, small-sample protocols and should not be treated as paired results from the same test set.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[Upload transaction CSV] --> B[Validate schema and class balance]
+    B --> C[Stratified scarce-label split]
+    C --> D[Training-only scaling and PCA]
+    D --> E[Quantum feature-map states]
+    E --> F[Kernel similarity matrix]
+    F --> G[Quantum-kernel SVM]
+    C --> H[Classical baselines]
+    G --> I[Held-out metrics and paired seeds]
+    H --> I
+    I --> J[Saved run, case review, exports]
+    E --> K[Aer noise and mitigation labs]
+```
+
+### 1. Prepare the data
+
+Upload a CSV containing numeric `V1`–`V28`, `Time`, `Amount`, and binary `Class` columns. The Dataset workspace checks required fields, numeric values, missing or non-finite values, class labels, row counts, duplicates, and class balance. A SHA-256 fingerprint records which dataset a run used.
+
+The model uses `V1`–`V28` and `Amount` as its 29 input features. `Time` is validated and shown in dataset context, but is not included in the classifier feature list.
+
+### 2. Create a scarce-label benchmark
+
+For each seed, the ideal protocol holds out 400 legitimate and 100 fraud transactions. From the remaining data, it samples 200 legitimate rows and `k` fraud rows for training, where `k` is 6, 10, 20, or 50. The benchmark defaults to ten deterministic seeds.
+
+Standard scaling, PCA, angle mapping, model selection, and decision thresholds are fit on training data only. The held-out set is evaluated once. Its balanced class ratio makes a small comparison measurable, but differs from natural fraud prevalence.
+
+### 3. Compare quantum and classical models
+
+PCA reduces the 29 model features to the selected number of components (4, 6, or 8). The components are mapped to angles in `[0, π]`. Qiskit builds a feature map using Hadamard, RZ, and optional pairwise RZZ gates. The similarity between two transactions is:
+
+```text
+K(x, y) = |<φ(x) | φ(y)>|²
+```
+
+The resulting precomputed kernel matrix is supplied to a classical SVM. Baselines include RBF-SVM, logistic regression, random forest, and an all-features classical RBF-SVM. Model parameters are selected using training-only cross-validation.
+
+### 4. Study noise and mitigation
+
+Noise Lab uses Qiskit Aer with configurable single-qubit, two-qubit, and readout errors. Its **quick protocol** takes 15 fraud and 15 legitimate examples per seed, then uses a 20-row training set and a 10-row test set. The quick shot sweep compares 128, 256, and 512 shots; individual runs can use higher shot counts.
+
+Mitigation Lab folds circuits at noise scales 1, 3, and 5; extrapolates with linear, Richardson, and exponential methods; then repairs the training kernel by symmetrizing and projecting it to positive semidefinite form. Mitigation adds simulation cost and may not improve a run.
+
+## Explore the labs
+
+| Workspace | What you can do |
+|---|---|
+| **Overview** | Review the research question, saved evidence, and benchmark coverage. |
+| **Dataset** | Upload and validate a CSV; inspect rows, class balance, duplicates, and provenance. |
+| **Quantum Lab** | Configure the feature map, inspect circuit structure, and compare two feature vectors with an exact statevector kernel. |
+| **Benchmark** | Run ideal quantum/classical comparisons, review metrics and paired seed evidence, and launch entanglement or feature-map scaling ablations. |
+| **Noise Lab** | Compare ideal and finite-shot noisy kernels under LOW, MEDIUM, or HIGH error presets. |
+| **Mitigation Lab** | Inspect noise-scale extrapolation, kernel repair, and before/after metrics. |
+| **Fraud Case Lab** | Review held-out transactions, model disagreements, and fraud cases each model catches or misses. |
+| **Saved Runs** | Compare, replay, and inspect runs; view kernel heatmaps; export JSON, CSV, or Markdown. |
+| **Methodology / Resources / Limitations** | Read experiment rules, source links, metric definitions, and interpretation limits. |
+
+Additional workflow features include pre-run runtime estimates, background job progress and cancellation, a rule-based experiment planner, a staged judge demo, a bounded SHA-256-keyed kernel cache, run provenance, and a threshold policy sandbox. The sandbox changes the displayed decision policy; it does not retrain a model or establish a production threshold.
+
+## Technology and architecture
+
+| Layer | Tools | Responsibility |
+|---|---|---|
+| Web UI | React, TypeScript, Vite, CSS, Lucide | Dashboard, controls, progress, charts, case review |
+| API | Python, FastAPI, Pydantic, Uvicorn | Dataset validation, estimates, jobs, scoring, exports |
+| Classical ML | NumPy, pandas, scikit-learn | Preprocessing, PCA, SVMs, logistic regression, random forest, metrics |
+| Quantum simulation | Qiskit, Qiskit Aer | Circuit construction, statevector kernels, shot-based noise simulation |
+| Frontend hosting | Vercel | Static web application |
+| Backend hosting | Render | FastAPI worker for experiments and scoring |
+
+The browser sends requests to the FastAPI worker. Long experiments run as background jobs; the frontend polls their status. Completed runs save metadata, configuration, metrics, predictions, and applicable model/kernel artifacts. The local kernel cache is bounded to 512 MiB.
+
+## Metrics and interpretation
+
+- **PR-AUC / average precision** is the primary ranking metric for this rare-event task.
+- **Recall** shows how many held-out fraud cases are flagged; higher recall can also produce more false alerts.
+- **Precision** is affected by the balanced test prevalence and should not be read as expected live precision.
+- **F1** combines precision and recall at a threshold selected from training out-of-fold scores.
+- **ROC-AUC** measures ranking across thresholds; it can look strong even when precision is low in highly imbalanced data.
+- **Accuracy** is included for context, but can be misleading when fraud is rare.
+- **Paired differences and intervals** compare quantum and classical PR-AUC across seeds for the configured experiment. They do not establish universal advantage.
+
+## Quick start
+
+### Requirements
+
+- Python 3.11 or newer
+- Node.js 20 or newer
+- Windows PowerShell examples below; macOS/Linux users can activate the virtual environment with their shell's equivalent command.
+
+### Install dependencies
+
+From the repository root:
 
 ```powershell
 python -m venv .venv
@@ -50,130 +151,90 @@ python -m venv .venv
 python -m pip install -r backend/requirements.txt
 ```
 
-In one terminal, start the API:
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
-```
-
-In a second terminal:
+In a second terminal, install the frontend packages:
 
 ```powershell
 cd frontend
 npm install
+```
+
+### Start the API and frontend
+
+In terminal 1, from the repository root:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+In terminal 2:
+
+```powershell
+cd frontend
 npm run dev
 ```
 
-Open http://127.0.0.1:5173. The API documentation is at
-http://127.0.0.1:8000/docs. After installing dependencies, the application
-runs locally and does not need network access for simulation.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The local API docs are at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs). If port 8000 is already occupied, reuse the running API or start this one on another port and configure the frontend API URL accordingly.
 
-## Provide a dataset
+## Use your own dataset
 
-Use **Dataset** to upload a CSV (up to 250 MB) or load a local path. The app
-checks for `V1`–`V28`, `Time`, `Amount`, and binary `Class` columns, and reports
-row counts and class balance from the loaded file. Uploads stay in process
-memory; they are not written to disk. Do not expose this local API to a public
-network or share saved row-level prediction files without checking the data
-license and privacy requirements.
+1. Open **Dataset** and upload a CSV.
+2. Check the reported fraud and legitimate counts and resolve any validation errors.
+3. Open **Benchmark**, choose `k`, qubits, repeats, seed count, and a time budget.
+4. Start the run and follow progress. Larger kernels and ablation grids can take a long time on a free worker.
+5. Open **Saved Runs** or **Fraud Case Lab** to inspect and export the completed evidence.
 
-For the canonical ULB/Worldline dataset, place `creditcard.csv` at
-`datasets/raw/creditcard.csv`. That directory is ignored by Git. The default
-ideal benchmark uses the reproducible seed list
-`42, 123, 456, 789, 1000, 2024, 2025, 2026, 31415, 27182`; selecting fewer
-seeds uses a prefix of this list.
+The ideal benchmark requires at least 100 fraud and 600 legitimate transactions, plus enough separate fraud rows for the selected training-label budget. Noise Lab requires at least 15 examples of each class. The built-in demo data is synthetic and is useful for checking the workflow, not for making claims about real fraud performance.
 
-The ideal benchmark requires at least 100 fraud rows, 600 legitimate rows,
-and an additional `k` training fraud rows (k = 6, 10, 20, or 50). It samples
-200 legitimate and k fraud training rows, then tests on 100 unseen fraud and
-400 legitimate rows. The balanced test subset does not represent natural
-fraud prevalence. Preprocessing, PCA, angle scaling and decision thresholds
-are fit using training data only.
+For the canonical ULB/Worldline dataset, place `creditcard.csv` at `datasets/raw/creditcard.csv` for local default loading. This dataset is not included in the repository; obtain it from the [dataset source](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud) and follow its terms.
 
-## What works in this prototype
+## Deployments
 
-- A judge-oriented research dashboard centered on the scarce-label question,
-  with a four-budget scarcity curve populated only from saved benchmark runs,
-  paired verdict details, pre-run estimates for complete grids, and a
-  rule-based experiment planner.
-- A one-click staged judge demo with visible benchmark/noise/mitigation
-  progress and saved evidence replay. It is explicitly a staged showcase: the
-  noisy and mitigated stages use a separate balanced subset protocol.
-- Dataset validation and live class-balance statistics.
-- Qiskit feature-map inspection and exact statevector kernel-pair explorer.
-- Background, cancellable ideal benchmark jobs with ten configurable seeds,
-  training-only CV for model selection, classical baselines, stored metrics,
-  test-set decision scores, and paired per-seed verdicts.
-- Eight-configuration entanglement ablation (k = 6, 10, 20, 50 × RZZ on/off)
-  and nine-configuration feature-map scaling sweep (4/6/8 qubits × 1/2/3
-  repeats), each with mean ± standard deviation across seeds.
-- A fast 128/256/512 shot sweep with seed standard-deviation error bars, and a
-  local one-click judge demo that sequences ideal, noisy, and mitigated runs.
-- A SHA-256-keyed, 512 MiB-bounded local kernel-matrix cache keyed by dataset,
-  data splits, preprocessing, and feature-map configuration.
-- Cross-run configuration replay and a saved-run review with run-specific
-  metrics, verdict, configuration, dataset hash, seed summaries, and kernel
-  heatmap; the run registry also compares selected configurations.
-- A Fraud Case Lab with actual-vs-predicted labels, disagreement counts, and
-  filters for fraud-labelled cases each model catches while the other misses.
-- Kernel-geometry means (within-fraud, within-legitimate, and cross-class)
-  calculated from the saved training matrix. These are descriptive similarities,
-  not predictive performance metrics.
-- Dataset validation checklist and data provenance. Example transactions are
-  selected from the loaded dataset and retain their real `Class` labels; no
-  hand-authored sample is presented as labelled data.
-- An exact local runtime estimate for ideal kernel construction. It does not
-  include CV/model fitting and is an extrapolation, not a completion-time
-  guarantee.
-- Four-qubit Qiskit Aer noise and zero-noise extrapolation demonstrations across
-  three or five independent seeds, each using a balanced 30-row quick subset. These
-  remain quick demos, not full-protocol benchmark evidence.
-- Result listing/export, including the Markdown report, saved prediction
-  exploration, and saved ideal training-kernel heatmaps.
-- Persisted-model live scoring with an exact quantum-kernel SVC support-vector
-  contribution trace, a reference percentile from cross-validated training
-  scores, and a UI-only threshold policy sandbox. The contribution trace is a
-  model-margin explanation, not a per-feature causal explanation.
+- **Frontend:** [qkernel.vercel.app](https://qkernel.vercel.app)
+- **API health:** [qkernel-api.onrender.com/api/health](https://qkernel-api.onrender.com/api/health)
+- **Interactive API docs:** [qkernel-api.onrender.com/docs](https://qkernel-api.onrender.com/docs)
 
-## Research limits to keep visible
+The Vercel production environment must set `VITE_API_URL` to the API origin, with no trailing slash, then rebuild the frontend. The Render service configuration is in [`render.yaml`](render.yaml); it starts Uvicorn and sets the CORS origins.
 
-The ideal benchmark and small noisy/ZNE demonstration are separate protocols.
-The noise demonstration uses at least three seeds and a fixed 30/30 balanced
-subset per seed; it does not implement the full 100-fraud/400-normal test
-protocol for noisy or mitigated runs.
-There is no same-split, full-protocol Aer noise benchmark yet. The Dashboard
-and Noise Lab keep the quick controlled simulation separate from the main
-benchmark so judges do not mistake the two result sets for paired evidence.
-The ablation grids and shot sweep run as multiple independent jobs and may be
-long; the estimator covers kernel/simulator work and is not a completion-time
-guarantee. Noise sweeps use balanced demo subsets, not the full ideal benchmark
-protocol. Thermal-relaxation noise is not modeled. Live decision scores are not
-calibrated probabilities; the threshold sandbox is exploratory and does not
-retrain the model or establish a production operating point. Use the persistent
-API worker for reproducible experiments; Vercel hosts the static frontend.
+> **Render Free notes:** the worker sleeps after inactivity, and the first request can take about a minute while it wakes. Free workers have limited CPU and memory. Their filesystem is ephemeral, so uploaded datasets and saved files may disappear after sleep, restart, or redeployment unless persistent storage is configured. Re-upload the CSV after a reset and export important runs.
 
-Treat every result as prototype research output. Simulation time is not
-quantum-hardware performance. Accuracy can mislead when fraud is rare. A
-balanced subset changes class prevalence. Small sample comparisons are
-uncertain, and this work cannot establish universal quantum advantage.
+## Research limits
 
-## Project layout
+- All quantum results are software simulations. Simulation runtime is not quantum-hardware performance.
+- The ideal benchmark and the quick noisy/mitigated protocols use different data splits and sample sizes; do not present them as paired same-test-set results.
+- The quick Noise Lab is exploratory and too small for conclusion-grade claims.
+- The balanced held-out set does not represent natural transaction prevalence.
+- The project has not established generalization across banks, geographies, newer datasets, or time periods.
+- SVM decision scores are not calibrated probabilities. The threshold sandbox does not retrain or set a validated operating point.
+- Thermal-relaxation noise is not modeled, and mitigation can add cost without improving results.
+- No universal quantum advantage is established; in the saved ideal runs, the classical baseline performs better at all four tested label budgets.
+- This is a research prototype, not a real-time payment gateway or financial decision service.
 
-- `frontend/`: React, TypeScript and Vite user interface.
-- `backend/app/`: FastAPI API, dataset checks, Qiskit utilities, benchmark job
-  workers, Qiskit Aer noise and mitigation experiment. These research routes
-  remain in a consolidated module for this prototype; splitting them into
-  separate API/domain packages is future maintenance work.
-- `datasets/`: user-managed local data; files are ignored by Git.
-- `results/`: generated experiment folders; files are ignored by Git.
-- `frontend/src/content.ts`: centralized application copy.
+## Repository map
 
-The UI uses ink `#17232D`, paper `#F4F2EC`, slate `#64717A`, rust `#A94F35`,
-moss `#557565`, and gold `#B38A3E`; DM Sans for reading and DM Mono for
-measurements. It supports system dark mode, reduced motion, and responsive
-layouts.
+```text
+QKernel/
+├── backend/app/       FastAPI routes, benchmark jobs, quantum kernels, noise and mitigation
+├── frontend/          React + TypeScript application
+├── datasets/          User-managed datasets (ignored by Git)
+├── results/           Generated runs and artifacts
+├── render.yaml        Render API service definition
+├── vercel.json        Vercel frontend build configuration
+└── README.md
+```
 
-If `VITE_API_URL` is not set in Vercel, the frontend uses same-origin `/api`
-requests and the app will not reach the Render worker. Set the variable and
-redeploy after creating the backend.
+## Acknowledgements
+
+- Quantum-kernel research: Havlicek et al., [Supervised learning with quantum enhanced feature spaces](https://arxiv.org/abs/1804.11326).
+- Dataset: the Credit Card Fraud Detection dataset associated with Worldline and the Machine Learning Group at ULB; see the [dataset page](https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud).
+- Software: [Qiskit](https://quantum.cloud.ibm.com/docs), [Qiskit Aer](https://qiskit.github.io/qiskit-aer/), [scikit-learn](https://scikit-learn.org/), [FastAPI](https://fastapi.tiangolo.com/), [React](https://react.dev/), and [Vite](https://vite.dev/).
+
+The README layout takes inspiration from the linked BeatAhead README. Q-Fraud Intelligence's implementation, research protocol, and results are this project's own; the reference repository is not a code or results source.
+
+---
+
+<div align="center">
+
+**A transparent benchmark is valuable even when the classical model wins.**
+
+</div>
